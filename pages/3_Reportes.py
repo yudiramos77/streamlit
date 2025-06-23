@@ -1,4 +1,3 @@
-# c:\Users\JulioRodriguez\Documents\GitHub\streamlit\pages\3_Reports.py
 import streamlit as st
 import pandas as pd
 import urllib.parse

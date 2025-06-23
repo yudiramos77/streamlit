@@ -1,5 +1,3 @@
-# c:\Users\JulioRodriguez\Documents\GitHub\streamlit\pages\2_Asistencia.py
-import streamlit as st
 import pandas as pd
 import datetime
 import re

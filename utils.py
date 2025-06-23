@@ -1,4 +1,3 @@
-# c:\Users\JulioRodriguez\Documents\GitHub\streamlit\utils.py
 import streamlit as st
 import pandas as pd
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
