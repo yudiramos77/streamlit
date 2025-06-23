@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import datetime
 import re
@@ -6,8 +7,12 @@ import time
 from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated
 from config import setup_page, db
 
+# Initialize session state for login if it doesn't exist
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
 # --- Login Check ---
-if not st.session_state.get('logged_in', False):
+if not st.session_state.logged_in:
     st.error("Debe iniciar sesión para acceder a esta página.")
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
