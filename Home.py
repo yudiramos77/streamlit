@@ -10,33 +10,32 @@ import streamlit as st
 if st.session_state.get('admin', True):
     pages = {
         "Inicio": [
-            st.Page("Login.py", title="Login")
+            st.Page("Login.py", title="🔐 Login")
         ],
         "Admin": [
-            st.Page("pages/1_Estudiantes_admin.py", title="Estudiantes"),
-            st.Page("pages/6_Admin.py", title="Administrar"),
-            st.Page("pages/0_Semanas_Descanso.py", title="Vacaciones"),
-            st.Page("pages/4_Modulos_admin.py", title="Módulos")
+            st.Page("pages/1_Estudiantes_admin.py", title="🎓 Estudiantes"),
+            st.Page("pages/0_Semanas_Descanso.py", title="🌴 Vacaciones"),
+            st.Page("pages/4_Modulos_admin.py", title="📚 Módulos")
         ],
         "Reportes": [
             # st.Page("pages/3_Reportes.py", title="Asistencia"),
-            st.Page("pages/5_Reporte_estudiantes_admin.py", title="Estudiantes"),
-            st.Page("pages/6_Buscar_estudiantes_Admin.py", title="Buscar")
+            st.Page("pages/5_Reporte_estudiantes_admin.py", title="🎓 Estudiantes"),
+            st.Page("pages/6_Buscar_estudiantes_Admin.py", title="🔍 Buscar")
         ],
     }
 else:
     pages = {
         "Inicio": [
-            st.Page("Login.py", title="Login")
+            st.Page("Login.py", title="🔐 Login")
         ],
         "Datos": [
-            st.Page("pages/2_Asistencia.py", title="Asistencia"),
-            st.Page("pages/4_Modulos.py", title="Módulos"),
-            st.Page("pages/0_Semanas_Profesores.py", title="Vacaciones")
+            st.Page("pages/2_Asistencia.py", title="📅 Asistencia"),
+            st.Page("pages/4_Modulos.py", title="📚 Módulos"),
+            st.Page("pages/0_Semanas_Profesores.py", title="🌴 Vacaciones")
         ],
         "Reportes": [
-            st.Page("pages/3_Reportes.py", title="Asistencia"),
-            st.Page("pages/5_Reporte_estudiantes.py", title="Estudiantes")
+            st.Page("pages/3_Reportes.py", title="📅 Asistencia"),
+            st.Page("pages/5_Reporte_estudiantes.py", title="🎓 Estudiantes")
         ],
     }
 
