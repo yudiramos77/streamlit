@@ -318,8 +318,9 @@ else:
             "Microsoft Teams", 
             "Módulo (ID)", 
             "Fecha de Inicio", 
+            "Módulo (Final)",
             "Fecha de Finalización", 
-            "Último Módulo",
+           
             
         ]
     )
