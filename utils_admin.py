@@ -143,7 +143,7 @@ def admin_get_student_group_emails():
         return []
     
 @st.cache_data
-def admin_load_students(course_email):
+def admin_load_students(course_email, last_updated):
     """
     Load students data from Firebase and ensure all required fields are present.
     

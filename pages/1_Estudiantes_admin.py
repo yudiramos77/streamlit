@@ -109,12 +109,12 @@ def get_weeks(selected_course):
 # This function will load student data from the database and cache it.
 # It will re-run only if selected_course changes or the cache is explicitly cleared.
 @st.cache_data(ttl=3600) # Cache data for 1 hour
-def get_current_students_data(course_email):
+def get_current_students_data(course_email, students_last_updated):
     """Loads student data for the given course email, optimized with caching."""
     if not course_email:
         return pd.DataFrame(), None # Return empty DataFrame if no course is selected
     # st.info(f"Cargando estudiantes para el curso: {course_email.capitalize().split('@')[0]}...")
-    df, timestamp = admin_load_students(course_email)
+    df, timestamp = admin_load_students(course_email, students_last_updated)
     st.success("Estudiantes cargados exitosamente." if df is not None else "Error al cargar estudiantes.")
     return df, timestamp
 
@@ -123,7 +123,8 @@ def get_current_students_data(course_email):
 # This ensures the database is read only once per course per session.
 if selected_course:
     if selected_course not in st.session_state.students_df_by_course:
-        df_loaded, _ = get_current_students_data(selected_course) # Use the cached function
+        students_last_updated = get_last_updated('students', selected_course)
+        df_loaded, _ = get_current_students_data(selected_course, students_last_updated) # Use the cached function
         if df_loaded is not None:
             st.session_state.students_df_by_course[selected_course] = df_loaded
         else:
