@@ -20,13 +20,13 @@ def admin_get_last_updated(table_name, course_email):
     if user_email:
         user_email = user_email.replace('.', ',')
         ref = db.child("metadata").child(table_name).child(user_email)
-        snapshot = ref.get()
+        snapshot = ref.get(token=st.session_state.user_token)
         if snapshot.val() is not None:
             metadata = snapshot.val()
         else:
             return None
     else:
-        metadata = db.child("metadata").child(table_name).get().val()
+        metadata = db.child("metadata").child(table_name).get(token=st.session_state.user_token).val()
     if metadata and 'last_updated' in metadata:
         return metadata['last_updated']
     else:
@@ -48,11 +48,11 @@ def admin_set_last_updated(table_name, course_email):
         safe_email = course_email.replace('.', ',')
         db.child("metadata").child(table_name).child(safe_email).update({
             'last_updated': now_iso
-        })
+        }, token=st.session_state.user_token)
     else:
         db.child("metadata").child(table_name).update({
             'last_updated': now_iso
-        })
+        }, token=st.session_state.user_token)
     return now_iso
     
 def admin_get_students_by_email(email):
@@ -79,7 +79,7 @@ def admin_get_students_by_email(email):
         # you might need to escape them or store them differently if direct
         # key access doesn't work. However, typically, Firebase handles
         # this if the key was set using a string.
-        snapshot = students_ref.child(email.replace('.', ',')).get() # Common workaround for '.' in keys
+        snapshot = students_ref.child(email.replace('.', ',')).get(token=st.session_state.user_token) # Common workaround for '.' in keys
 
         # Check if any data was returned for that specific email key
         if not snapshot.val():
@@ -123,7 +123,7 @@ def admin_get_student_group_emails():
     """
     try:
         students_ref = db.child("students")
-        students_snapshot = students_ref.get()
+        students_snapshot = students_ref.get(token=st.session_state.user_token)
         print('\n\n---------------------------------database readed-------------------------\n\n', {k: v['data'][0] if v and 'data' in v else None for k, v in students_snapshot.val().items()})
 
         if not students_snapshot.val():
@@ -154,7 +154,7 @@ def admin_load_students(course_email):
         user_email = course_email
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
-        data = db.child("students").child(user_email).get().val()
+        data = db.child("students").child(user_email).get(token=st.session_state.user_token).val()
         st.session_state.call_count += 1
         print(f"\n{st.session_state.call_count} ---data from firebase----\n", data)
 
@@ -286,7 +286,7 @@ def admin_save_students(course_email, students_df):
         
         # Save to Firebase with error handling
         try:
-            db.child("students").child(course_email).set(data)
+            db.child("students").child(course_email).set(data, token=st.session_state.user_token)
             st.success(f"Successfully saved {len(df)} student records to {course_email}.")
             admin_set_last_updated('students', course_email)
             return True
@@ -314,7 +314,7 @@ def admin_get_available_modules(user_email: str) -> list:
     try:
         # Create a fresh Firebase reference for this operation
         # Note: You should ensure 'db' is initialized before this function is called.
-        modules_ref = db.child("modules").child(user_email).get()
+        modules_ref = db.child("modules").child(user_email).get(token=st.session_state.user_token)
         # print("\n\nAvailable modules for user:", modules_ref.val())
         # if 'call_count' not in st.session_state:
         #     st.session_state.call_count = 0
@@ -427,11 +427,11 @@ def save_modules_to_db(user_email: str, modules_data: list[dict]) -> bool:
             else:
                 # --- This is a NEW module, so we PUSH it ---
                 # .push() generates the unique ID for us
-                user_modules_ref.push(module)
+                user_modules_ref.push(module, token=st.session_state.user_token)
 
         # Send all updates for existing records in a single, efficient call
         if updates:
-            user_modules_ref.update(updates)
+            user_modules_ref.update(updates, token=st.session_state.user_token)
 
         # Note: This logic does not handle row DELETION from the database.
         # If a user can delete rows, you would need a more complex sync:
@@ -456,7 +456,7 @@ def load_breaks():
     try:
         # Create a fresh reference to the 'breaks' child node
         breaks_ref = db.child("breaks")
-        breaks_data = breaks_ref.get().val() or {} # Get data, default to empty dict if None
+        breaks_data = breaks_ref.get(token=st.session_state.user_token).val() or {} # Get data, default to empty dict if None
         
         # Ensure the retrieved data is a dictionary
         if not isinstance(breaks_data, dict):
@@ -470,7 +470,7 @@ def load_breaks():
 def load_breaks_from_db():
     """Load breaks from Firebase and format them for date calculations."""
     try:
-        breaks_ref = db.child("breaks").get()
+        breaks_ref = db.child("breaks").get(token=st.session_state.user_token)
         if not breaks_ref.val():
             return []
             
@@ -582,7 +582,7 @@ def save_new_module_to_db(user_email: str, module_data: dict) -> str:
     """
     try:
         user_modules_ref = db.child("modules").child(user_email)
-        result = user_modules_ref.push(module_data)
+        result = user_modules_ref.push(module_data, token=st.session_state.user_token)
         return result["name"]
     except Exception as e:
         st.error(f"Error al guardar el módulo: {str(e)}")
@@ -646,14 +646,14 @@ def sync_firebase_updates(df_old: pd.DataFrame, df_new: pd.DataFrame):
 
 def update_module_to_db(course_id: str, firebase_key: str, module_data: dict):
     try:
-        db.child("modules").child(course_id).child(firebase_key).update(module_data)
+        db.child("modules").child(course_id).child(firebase_key).update(module_data, token=st.session_state.user_token)
         admin_set_last_updated('modules', course_id)
     except Exception as e:
         st.error(f"Error al actualizar el módulo: {str(e)}")
 
 def delete_module_from_db(course_id: str, firebase_key: str):
     try:
-        db.child("modules").child(course_id).child(firebase_key).remove()
+        db.child("modules").child(course_id).child(firebase_key).remove(token=st.session_state.user_token)
         admin_set_last_updated('modules', course_id)
     except Exception as e:
         st.error(f"Error al eliminar el módulo: {str(e)}")
@@ -682,7 +682,7 @@ def find_students(search_term: str, course_email: str = None, status: str = "in_
 
         if course_email:
             # Fetch data for a specific course
-            snapshot = students_ref.child(course_email).child("data").get()
+            snapshot = students_ref.child(course_email).child("data").get(token=st.session_state.user_token)
             if snapshot.val() is not None:
                 # Firebase can return dict (if a single item) or list (if multiple items)
                 # Ensure we handle both cases correctly
@@ -700,7 +700,7 @@ def find_students(search_term: str, course_email: str = None, status: str = "in_
                             raw_students_data.append(student_data_raw)
         else:
             # Fetch data for all courses
-            all_courses_snapshot = students_ref.get()
+            all_courses_snapshot = students_ref.get(token=st.session_state.user_token)
             if all_courses_snapshot.val() is not None:
                 for course_node in all_courses_snapshot.each():
                     course_key = course_node.key()

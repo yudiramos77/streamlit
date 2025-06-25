@@ -25,7 +25,7 @@ def save_break(break_id, break_data):
     try:
         # Create a fresh reference to the specific break using its ID
         break_ref = db.child("breaks").child(break_id)
-        break_ref.set(break_data) # Set (create or overwrite) the data
+        break_ref.set(break_data, token=st.session_state.user_token) # Set (create or overwrite) the data
         return True
     except Exception as e:
         st.error(f"Error al guardar la semana de descanso: {e}")
@@ -121,7 +121,7 @@ def display_breaks_table(breaks_data):
             for _, row in breaks_to_delete.iterrows():
                 try:
                     # Create a fresh reference for each deletion to avoid path issues
-                    db.child("breaks").child(row['ID']).remove()
+                    db.child("breaks").child(row['ID']).remove(token=st.session_state.user_token)
                     success_count += 1
                 except Exception as e:
                     st.error(f"Error al eliminar la semana de descanso '{row['Nombre']}': {str(e)}")
@@ -254,7 +254,7 @@ def main():
         
         # Save the new break to Firebase
         try:
-            db.child("breaks").child(break_id).set(break_data)
+            db.child("breaks").child(break_id).set(break_data, token=st.session_state.user_token)
             st.success("¡Semana de descanso agregada exitosamente!")
             st.rerun()
         except Exception as e:

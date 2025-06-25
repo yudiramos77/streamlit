@@ -16,13 +16,13 @@ def get_last_updated(table_name, user_email=None):
     if user_email:
         user_email = user_email.replace('.', ',')
         ref = db.child("metadata").child(table_name).child(user_email)
-        snapshot = ref.get()
+        snapshot = ref.get(token=st.session_state.user_token)
         if snapshot.val() is not None:
             metadata = snapshot.val()
         else:
             return None
     else:
-        metadata = db.child("metadata").child(table_name).get().val()
+        metadata = db.child("metadata").child(table_name).get(token=st.session_state.user_token).val()
     if metadata and 'last_updated' in metadata:
         return metadata['last_updated']
     else:
@@ -43,11 +43,11 @@ def set_last_updated(table_name, user_email=None):
         user_email = user_email.replace('.', ',')
         db.child("metadata").child(table_name).child(user_email).update({
             'last_updated': now_iso
-        })
+        }, token=st.session_state.user_token)
     else:
         db.child("metadata").child(table_name).update({
             'last_updated': now_iso
-        })
+        }, token=st.session_state.user_token)
     return now_iso
     
 @st.cache_data
@@ -62,7 +62,7 @@ def load_students(students_last_updated):
         user_email = st.session_state.email.replace('.', ',')
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
-        data = db.child("students").child(user_email).get().val()
+        data = db.child("students").child(user_email).get(token=st.session_state.user_token).val()
         st.session_state.call_count += 1
         print(f"\n{st.session_state.call_count} ---data from firebase----\n", data)
 
@@ -194,7 +194,7 @@ def save_students(students_df):
         
         # Save to Firebase with error handling
         try:
-            db.child("students").child(user_email).set(data)
+            db.child("students").child(user_email).set(data, token=st.session_state.user_token)
             st.success(f"Successfully saved {len(df)} student records.")
             set_last_updated('students')
             return True
@@ -229,7 +229,7 @@ def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
     try:
         user_email = st.session_state.email.replace('.', ',')
         date_str = date.strftime('%Y-%m-%d')
-        raw_data = db.child("attendance").child(user_email).child(date_str).get().val()
+        raw_data = db.child("attendance").child(user_email).child(date_str).get(token=st.session_state.user_token).val()
 
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
@@ -264,7 +264,7 @@ def load_modules_from_db(user_email: str) -> pd.DataFrame:
     print("\n\nload_modules_from_db")
     try:
         user_email_sanitized = user_email.replace('.', ',')
-        modules_data = db.child("modules").child(user_email_sanitized).get().val()
+        modules_data = db.child("modules").child(user_email_sanitized).get(token=st.session_state.user_token).val()
         print("\n\nmodules_data", modules_data)
         
         if not modules_data:
@@ -298,7 +298,7 @@ def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
     """Save modules to Firebase and update session."""
     try:
         user_email_sanitized = user_email.replace('.', ',')
-        db.child("modules").child(user_email_sanitized).set(modules_df.to_dict('records'))
+        db.child("modules").child(user_email_sanitized).set(modules_df.to_dict('records'), token=st.session_state.user_token)
         update_modules_in_session(modules_df)
         return True
     except Exception as e:
@@ -311,7 +311,7 @@ def get_module_name_by_id(user_email: str, module_id: str) -> str:
     print("calling get_module_name_by_id with module_id -", module_id)
     try:
         user_email_sanitized = user_email.replace('.', ',')
-        modules_data = db.child("modules").child(user_email_sanitized).child(module_id).get().val()
+        modules_data = db.child("modules").child(user_email_sanitized).child(module_id).get(token=st.session_state.user_token).val()
         print("\n-----modules_data from get_module_name_by_id database ---", modules_data)
         if modules_data:
             return modules_data.get('name')
@@ -368,7 +368,7 @@ def save_attendance(date: datetime.date, attendance_data: list):
         date_str = date.strftime('%Y-%m-%d')
         # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
         # For now, assuming they are simple strings.
-        db.child("attendance").child(user_email).child(date_str).set(attendance_data)
+        db.child("attendance").child(user_email).child(date_str).set(attendance_data, token=st.session_state.user_token)
         set_last_updated('attendance', user_email)
         return True
     except Exception as e:
@@ -383,7 +383,7 @@ def get_attendance_dates(attendance_last_updated: str):
     """
     try:
         user_email = st.session_state.email.replace('.', ',')
-        docs = db.child("attendance").child(user_email).get().val()
+        docs = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val()
 
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
@@ -407,7 +407,6 @@ def get_attendance_dates(attendance_last_updated: str):
     except Exception as e:
         st.error(f"Error loading attendance dates: {str(e)}")
         return []
-
 
 def delete_attendance_dates(dates_to_delete=None, delete_all=False):
     """
@@ -438,7 +437,7 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
                 return False
 
             try:
-                all_user_records_ref.remove()
+                all_user_records_ref.remove(token=st.session_state.user_token)
                 print(f"SUCCESS: All attendance records removed at path: {all_user_records_ref.path}")
                 print(f"SUCCESS: Attendance records last updated at: {get_last_updated('attendance')}")
                 set_last_updated('attendance')
@@ -474,12 +473,12 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
         for date_str in valid_dates:
             full_path = f"{user_base_attendance_path}/{date_str}"
             ref_for_get = db.child(full_path)
-            data_snapshot = ref_for_get.get()
+            data_snapshot = ref_for_get.get(token=st.session_state.user_token)
 
             if data_snapshot.val() is not None:
                 print(f"INFO: Removing data at path: {full_path}")
                 try:
-                    db.child(full_path).remove()
+                    db.child(full_path).remove(token=st.session_state.user_token)
                     set_last_updated('attendance')
                     success = True
                 except Exception as e:
@@ -665,7 +664,7 @@ def get_highest_module_credit(user_email: str, modules_last_updated: str) -> int
     """
     try:
         # Create a fresh Firebase reference for this operation
-        modules_ref = db.child("modules").child(user_email).get()
+        modules_ref = db.child("modules").child(user_email).get(token=st.session_state.user_token)
 
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
@@ -711,7 +710,7 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None) -> di
         target_date = datetime.date.today()
 
     try:
-        modules_ref = db.child("modules").child(user_email).get()
+        modules_ref = db.child("modules").child(user_email).get(token=st.session_state.user_token)
 
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
@@ -775,7 +774,7 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
     """
     try:
         # Create a fresh Firebase reference for this operation
-        modules_ref = db.child("modules").child(user_email).get()
+        modules_ref = db.child("modules").child(user_email).get(token=st.session_state.user_token)
 
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
