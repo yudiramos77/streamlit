@@ -45,7 +45,7 @@ def update_attendance_session_state():
             not st.session_state.attendance_data['dates']):
         try:
             user_email = st.session_state.email.replace('.', ',')
-            all_dates = db.child("attendance").child(user_email).get().val() or {}
+            all_dates = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val() or {}
             
             st.session_state.attendance_data = {
                 'last_updated': attendance_last_updated,

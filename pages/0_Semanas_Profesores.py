@@ -18,7 +18,7 @@ if not st.session_state.get('logged_in', False):
 def load_breaks():
     """Load breaks from Firebase and return as a list of dictionaries with calculated end date."""
     try:
-        breaks_ref = db.child("breaks").get()
+        breaks_ref = db.child("breaks").get(token=st.session_state.user_token)
         if not breaks_ref.val():
             return []
         
