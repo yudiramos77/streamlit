@@ -159,8 +159,10 @@ else:
         return f"https://teams.microsoft.com/l/chat/0/0?users={email}&message={encoded_message}"  
 
     def create_email_link(email: str, message: str) -> str:
-        encoded_message = urllib.parse.quote(message)
-        return f"mailto:{email}?subject={default_subject}&body={encoded_message}"  
+        to = urllib.parse.quote(email)
+        subj = urllib.parse.quote(default_subject)
+        body = urllib.parse.quote(message)
+        return f"https://outlook.office.com/mail/deeplink/compose?to={to}&subject={subj}&body={body}"
     
 
     # Ensure phone numbers are strings and clean them

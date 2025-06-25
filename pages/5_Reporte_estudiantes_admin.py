@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import urllib.parse
 from config import setup_page
 from utils import (
     load_students,
@@ -184,6 +185,39 @@ if course_emails:
         ]
         df = df_loaded[internal_columns].copy()
 
+        # 2. Create communication links
+        default_message = "Hola, me comunico desde el instituto. ¿Cómo estás?"
+        default_subject = "De Interamerican Technical Institute"
+        
+        def create_whatsapp_link(phone: str, message: str) -> str:
+            if pd.isna(phone) or str(phone).strip() == 'nan':
+                return ""
+            phone = ''.join(filter(str.isdigit, str(phone)))
+            encoded_message = urllib.parse.quote(message)
+            return f"https://wa.me/{phone}?text={encoded_message}"  
+
+        def create_teams_link(email: str, message: str) -> str:
+            if pd.isna(email) or not str(email).strip():
+                return ""
+            encoded_message = urllib.parse.quote(message)
+            return f"https://teams.microsoft.com/l/chat/0/0?users={email}&message={encoded_message}"  
+
+        def create_email_link(email: str, message: str) -> str:
+            if pd.isna(email) or not str(email).strip():
+                return ""
+            to = urllib.parse.quote(email)
+            subj = urllib.parse.quote(default_subject)
+            body = urllib.parse.quote(message)
+            return f"https://outlook.office.com/mail/deeplink/compose?to={to}&subject={subj}&body={body}"
+        
+        # Ensure phone numbers are strings and clean them
+        df['telefono'] = df['telefono'].astype(str).str.strip()
+        
+        # Create communication links
+        df['whatsapp_link'] = df['telefono'].apply(create_whatsapp_link, message=default_message)
+        df['teams_link'] = df['email'].apply(create_teams_link, message=default_message)
+        df['email_link'] = df['email'].apply(create_email_link, message=default_message)
+
         # 2. Rename columns for user-friendly display
         # Note: We don't rename 'modulo_fin_id' so we can easily reference it later.
         column_renames = {
@@ -193,7 +227,11 @@ if course_emails:
             'modulo': 'Módulo (ID)',
             'fecha_inicio': 'Fecha de Inicio',
             'fecha_fin': 'Fecha de Finalización',
-            'modulo_fin_name': 'Módulo (Final)'
+            'modulo_fin_name': 'Módulo (Final)',
+            'whatsapp_link': 'WhatsApp',
+            'teams_link': 'Microsoft Teams',
+            'email_link': 'Email',
+            'modulo_fin_id': 'modulo_fin_id'  # Will be hidden but needed for filtering
         }
         df_renamed = df.rename(columns=column_renames)
 
@@ -311,7 +349,11 @@ if course_emails:
                 "Teléfono": "Teléfono",
                 "Módulo (ID)": "Módulo (Inicio)",
                 "Fecha de Inicio": "Inicio",
-                "Fecha de Finalización": "Fin"
+                "Fecha de Finalización": "Fin",
+                "Módulo (Final)": "Módulo (Final)",
+                "Email": st.column_config.LinkColumn("Email", display_text="📧"),
+                "WhatsApp": st.column_config.LinkColumn("WhatsApp", display_text="💬"),
+                "Microsoft Teams": st.column_config.LinkColumn("Teams", display_text="💻")  
             }
         )
         col1, col2, col3, col4 = st.columns(4)
@@ -325,7 +367,6 @@ if course_emails:
         # st.info("Por favor, seleccione un módulo para ver los estudiantes.")
         # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
         # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
-
 else:
     st.warning("No se encontraron cursos disponibles.")
     modules_selected_course = None # Ensure it's explicitly None if no courses
