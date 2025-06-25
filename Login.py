@@ -39,9 +39,14 @@ def logout_user():
 # --- Page Logic ---
 if not st.session_state.logged_in:
 
+
+
     col1, col2, col3 = st.columns([1, 3, 1]) # Adjust ratios here for different widths
+        
     with col2:
         with st.form("login_form"):
+            st.header("🎓 ITI Admin")
+            st.info("Por favor, inicie sesión para continuar.")
             email = st.text_input("Correo Electrónico", key="login_email")
             password = st.text_input("Contraseña", type="password", key="login_password")
             submitted = st.form_submit_button("Iniciar Sesión", type="primary")
