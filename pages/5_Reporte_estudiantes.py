@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import urllib.parse
 from config import setup_page
 from utils import (
     load_students,
@@ -144,8 +145,35 @@ else:
     ]
     df = df_loaded[internal_columns].copy()
 
-    # 2. Rename columns for user-friendly display
-    # Note: We don't rename 'modulo_fin_id' so we can easily reference it later.
+    # 2. Create WhatsApp and Teams links
+    default_message = "Hola, me comunico desde el instituto. ¿Cómo estás?"
+    default_subject = "De Interamerican Technical Institute"
+    
+    def create_whatsapp_link(phone: str, message: str) -> str:
+        phone = ''.join(filter(str.isdigit, phone))
+        encoded_message = urllib.parse.quote(message)
+        return f"https://wa.me/{phone}?text={encoded_message}"  
+
+    def create_teams_link(email: str, message: str) -> str:
+        encoded_message = urllib.parse.quote(message)
+        return f"https://teams.microsoft.com/l/chat/0/0?users={email}&message={encoded_message}"  
+
+    def create_email_link(email: str, message: str) -> str:
+        encoded_message = urllib.parse.quote(message)
+        return f"mailto:{email}?subject={default_subject}&body={encoded_message}"  
+    
+
+    # Ensure phone numbers are strings and clean them
+    df['telefono'] = df['telefono'].astype(str).str.strip()
+    
+    # Create WhatsApp links
+    df['whatsapp_link'] = df['telefono'].apply(create_whatsapp_link, message=default_message)  
+    # Create Teams links
+    df['teams_link'] = df['email'].apply(create_teams_link, message=default_message)
+    # Create Email links
+    df['email_link'] = df['email'].apply(create_email_link, message=default_message)
+    
+    # 3. Rename columns for user-friendly display
     column_renames = {
         'nombre': 'Nombre',
         'email': 'Correo Electrónico',
@@ -153,9 +181,13 @@ else:
         'modulo': 'Módulo (ID)',
         'fecha_inicio': 'Fecha de Inicio',
         'fecha_fin': 'Fecha de Finalización',
-        'modulo_fin_name': 'Módulo (Final)'
+        'modulo_fin_name': 'Módulo (Final)',
+        'whatsapp_link': 'WhatsApp',
+        'teams_link': 'Microsoft Teams',
+        'email_link': 'Email Link',
     }
     df_renamed = df.rename(columns=column_renames)
+
 
     def highlight_row_warning(row):
         """
@@ -270,8 +302,24 @@ else:
             "Teléfono": "Teléfono",
             "Módulo (ID)": "Módulo (Inicio)",
             "Fecha de Inicio": "Inicio",
-            "Fecha de Finalización": "Fin"
-        }
+            "Fecha de Finalización": "Fin",
+            "WhatsApp": st.column_config.LinkColumn("WhatsApp", display_text="💬"),
+            "Microsoft Teams": st.column_config.LinkColumn("Teams", display_text="💻"),
+            "Email Link": st.column_config.LinkColumn("Email", display_text="📧")
+        },
+        column_order=[
+            "Nombre", 
+            "Correo Electrónico", 
+            "Teléfono", 
+            "Email Link", 
+            "WhatsApp", 
+            "Microsoft Teams", 
+            "Módulo (ID)", 
+            "Fecha de Inicio", 
+            "Fecha de Finalización", 
+            "Último Módulo",
+            
+        ]
     )
     col1, col2, col3, col4 = st.columns(4)
     with col1:

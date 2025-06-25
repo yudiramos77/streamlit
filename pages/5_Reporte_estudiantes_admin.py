@@ -55,9 +55,8 @@ if course_emails:
         key="course_selector" # Added key for consistency
     )
     # Student section
-    students_last_updated = get_last_updated('students')
-    # print("\n\nstudents_last_updated\n", students_last_updated)
-    df_loaded, _ = admin_load_students(modules_selected_course)
+    students_last_updated = get_last_updated('students',modules_selected_course)
+    df_loaded, _ = admin_load_students(modules_selected_course, students_last_updated)
     # df_loaded = admin_load_students(modules_selected_course)
     # print("\n\ndf_loaded\n", df_loaded)
 
