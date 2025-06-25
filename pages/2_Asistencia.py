@@ -21,6 +21,16 @@ if not st.session_state.logged_in:
 # Setup page title (now that config is done and user is logged in)
 setup_page("Gestión de Asistencia")
 
+SPANISH_DAY_NAMES = {
+    "Monday": "Lunes",
+    "Tuesday": "Martes",
+    "Wednesday": "Miércoles",
+    "Thursday": "Jueves",
+    "Friday": "Viernes",
+    "Saturday": "Sábado",
+    "Sunday": "Domingo"
+}
+
 # --- Session State Initialization ---
 if 'attendance_data' not in st.session_state:
     st.session_state.attendance_data = {
@@ -257,12 +267,13 @@ if all_attendance:
             if all_attendance:
                 # Create a DataFrame with the dates and a delete column
                 dates_df = pd.DataFrame({
+                    'Día': [SPANISH_DAY_NAMES[datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%A')] for d in attendance_data['dates']],
                     'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%m/%d/%Y') for d in attendance_data['dates']],
                     'Eliminar': [False] * len(attendance_data['dates'])
                 })
                 
                 # Move 'Eliminar' column to the first position
-                dates_df = dates_df[["Eliminar", "Fecha"]]
+                dates_df = dates_df[["Eliminar", "Día", "Fecha"]]
                 
                 # Display the data editor
                 st.info("Seleccione los ficheros de asistencia a eliminar para eliminar individualmente o Eliminar todo")
@@ -270,8 +281,9 @@ if all_attendance:
                 edited_df = st.data_editor(
                     dates_df,
                     column_config={
-                        "Eliminar": st.column_config.CheckboxColumn("Borrar", width="small", pinned=True),
+                        "Eliminar": st.column_config.CheckboxColumn("Editar", width="small", pinned=True),
                         "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                        "Día": st.column_config.TextColumn("Día", disabled=True, width="small"),
                     },
                     hide_index=True,
                     use_container_width=True,
