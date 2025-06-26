@@ -20,6 +20,10 @@ if (
     st.stop()
 # --- End Session Check ---
 
+# Initialize a counter to reset the data editor key when needed
+if 'editor_key_counter' not in st.session_state:
+    st.session_state.editor_key_counter = 0
+
 setup_page("Gestión de Asistencia")
 
 SPANISH_DAY_NAMES = {
@@ -30,6 +34,20 @@ SPANISH_DAY_NAMES = {
     "Friday": "Viernes",
     "Saturday": "Sábado",
     "Sunday": "Domingo"
+}
+SPANISH_MONTH_NAMES = {
+    "January": "Enero",
+    "February": "Febrero",
+    "March": "Marzo",
+    "April": "Abril",
+    "May": "Mayo",
+    "June": "Junio",
+    "July": "Julio",
+    "August": "Agosto",
+    "September": "Septiembre",
+    "October": "Octubre",
+    "November": "Noviembre",
+    "December": "Diciembre"
 }
 
 if 'attendance_data' not in st.session_state:
@@ -149,11 +167,12 @@ def reset_dialog_states():
 
 # Define the callback function that will be executed ONLY when the button is clicked
 def prepare_edit_dialog(selected_dates):
-    """Sets the session state required to open the edit dialog."""
+    """Sets the one-time flag to show the dialog on the next rerun."""
     if not selected_dates:
         st.warning("Por favor seleccione al menos una fecha para editar.")
         return
-    reset_dialog_states()
+    
+    # Just set the necessary data and the one-time flag.
     st.session_state.edit_dates_list = selected_dates
     st.session_state.show_edit_dialog = True
 
@@ -241,7 +260,7 @@ def edit_selected_dialog():
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 Guardar Cambios", type="primary"):
+        if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
             try:
                 updated_records_for_db = edited_df_in_dialog.to_dict('records')
 
@@ -259,9 +278,17 @@ def edit_selected_dialog():
                 st.error(f"Ocurrió un error al guardar: {str(e)}")
 
     with col2:
-        if st.button("❌ Cerrar Editor"):
+        if st.button("❌ Cerrar y Finalizar Edición"):
+            # 1. Hide the dialog
             st.session_state.show_edit_dialog = False
+            
+            # 2. Clear the list of dates that were being edited
             st.session_state.edit_dates_list = []
+            
+            # 3. Increment the key counter to force the data_editor to reset
+            st.session_state.editor_key_counter += 1
+            
+            # 4. Rerun the script to apply all changes
             st.rerun()
 
 @st.dialog("Confirmar eliminación")
@@ -311,9 +338,9 @@ def confirm_delete_all_dialog():
         "¿Está seguro que desea eliminar TODAS las asistencias? "
         "**Esta acción no se puede deshacer.**"
     )
-    col1, col2, _ = st.columns([4, 3, 3])
+    col1, col2, _ = st.columns([4, 4, 2])
     with col1:
-        if st.button("✅ Sí, eliminar todo", type="primary"):
+        if st.button("✅ Sí, eliminar todo", type="primary", use_container_width=True):
             try:
                 if delete_attendance_dates(delete_all=True):
                     st.session_state.current_batch_data_by_date = {}
@@ -330,7 +357,7 @@ def confirm_delete_all_dialog():
                 st.error(f"Error inesperado al eliminar las asistencias: {str(e)}")
     with col2:
          # When the "Cerrar Editor" button is clicked, we now clean up ALL related session state.
-        if st.button("❌ Cerrar Editor"):
+        if st.button("❌ Cerrar Editor", use_container_width=True):
             # Set the flag to hide the dialog
             st.session_state.show_edit_dialog = False
             # Clear the list of dates that were selected for editing
@@ -363,12 +390,12 @@ if all_attendance_dates:
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="attendance_dates_selector"
+                key=f"attendance_dates_selector_{st.session_state.editor_key_counter}"
             )
             
             selected_rows = edited_df[edited_df['Seleccionar']]
             
-            col1, col2, col3 = st.columns([2, 2, 6])
+            col1, col2, col3 = st.columns([2, 2, 2])
             with col1:
                 if st.button("Eliminar todo", type="primary", use_container_width=True):
                     reset_dialog_states()
@@ -400,12 +427,26 @@ if all_attendance_dates:
 else:
     st.info("No hay asistencias registradas.")
 
-if st.session_state.get('show_edit_dialog', False):
-    edit_selected_dialog()
+# --- Advanced Dialog Handling to Fix the "X" Button Issue ---
+
+# 1. Check if the "show" flag was set in the PREVIOUS script run.
+#    We will use this variable to decide whether to draw the dialog in THIS run.
+should_show_dialog_this_run = st.session_state.get('show_edit_dialog', False)
+
+# 2. Immediately reset the flag in the session state.
+#    This ensures that on any FUTURE rerun (e.g., from a checkbox click),
+#    the flag will be False, preventing the dialog from reopening.
+st.session_state.show_edit_dialog = False
+
+# 3. Now, use our local variable to decide whether to open the dialog.
+if should_show_dialog_this_run:
+    edit_selected_dialog() # The dialog will only be called this one time.
 elif st.session_state.show_delete_selected_dialog:
     confirm_delete_selected_dialog()
 elif st.session_state.show_delete_all_dialog:
     confirm_delete_all_dialog()
+
+# --- End of Advanced Handling ---
 
 st.header("Subir Archivos de Informe de Asistencia")
 uploaded_reports = st.file_uploader(
@@ -560,7 +601,10 @@ if st.session_state.prepared_attendance_dfs:
         if selected_date_obj in st.session_state.prepared_attendance_dfs:
             df_to_edit = st.session_state.prepared_attendance_dfs[selected_date_obj]
             total_attended = df_to_edit['Presente'].value_counts().get(True, 0)
-            st.markdown(f"#### Asistencia para: {selected_date_obj.strftime('%A, %d de %B de %Y')} ({total_attended} de {len(df_to_edit)})")
+            # Show date in Spanish
+            spanish_day_name = SPANISH_DAY_NAMES[selected_date_obj.strftime('%A')]
+            spanish_month_name = SPANISH_MONTH_NAMES[selected_date_obj.strftime('%B')]
+            st.markdown(f"#### Asistencia para: {spanish_day_name}, {selected_date_obj.day} de {spanish_month_name} de {selected_date_obj.year} ({total_attended} de {len(df_to_edit)})")
             
             edited_df = st.data_editor(
                 df_to_edit,
