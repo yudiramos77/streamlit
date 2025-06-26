@@ -115,7 +115,7 @@ def get_current_students_data(course_email, students_last_updated):
         return pd.DataFrame(), None # Return empty DataFrame if no course is selected
     # st.info(f"Cargando estudiantes para el curso: {course_email.capitalize().split('@')[0]}...")
     df, timestamp = admin_load_students(course_email, students_last_updated)
-    st.success("Estudiantes cargados exitosamente." if df is not None else "Error al cargar estudiantes.")
+    # st.success("Estudiantes cargados exitosamente." if df is not None else "Error al cargar estudiantes.")
     return df, timestamp
 
 # --- Load current students based on selected_course ---
