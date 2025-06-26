@@ -199,112 +199,112 @@ st.divider()
 st.subheader("3. Agregar Estudiantes")
 
 # Create tabs for different input methods
-tab1, tab2 = st.tabs(["📤 Subir Archivo", "✏️ Ingresar Texto"])
+# tab1, tab2 = st.tabs(["📤 Subir Archivo", "✏️ Ingresar Texto"])
 
-with tab1:
-    st.subheader("Cargar desde Archivo")
-    uploaded_file = st.file_uploader(
-        "Seleccione un archivo CSV o Excel con los estudiantes",
-        type=['csv', 'xlsx', 'xls'],
-        key="file_uploader"
-    )
+# with tab1:
+#     st.subheader("Cargar desde Archivo")
+#     uploaded_file = st.file_uploader(
+#         "Seleccione un archivo CSV o Excel con los estudiantes",
+#         type=['csv', 'xlsx', 'xls'],
+#         key="file_uploader"
+#     )
 
-with tab2:
-    st.subheader("Ingresar Datos Manualmente")
-    st.write("Ingrese los datos de los estudiantes en el siguiente formato:")
-    st.code("Nombre, Email, Canvas ID, Telefono", language="text")
+# with tab2:
+# st.subheader("Ingresar Datos Manualmente")
+st.info("Ingrese los datos de los estudiantes en el siguiente formato: Nombre, Email, Canvas ID, Telefono")
+# st.code("Nombre, Email, Canvas ID, Telefono", language="text")
 
-    students_text_area = st.text_area(
-        "Ingrese un estudiante por línea. Solo el nombre es obligatorio.",
-        height=150,
-        key="text_area_input",
-        placeholder="Ejemplo:\nJuan Pérez, juan@email.com,8780GOM , 786-123-4567\nAna García, ana@email.com, 9879PER, 786-123-4568\n..."
-    )
-    submit_add_students_text = st.button("Agregar Estudiantes")
+students_text_area = st.text_area(
+    "Ingrese un estudiante por línea. Solo el nombre es obligatorio.",
+    height=150,
+    key="text_area_input",
+    placeholder="Ejemplo:\nJuan Pérez, juan@email.com,8780GOM , 786-123-4567\nAna García, ana@email.com, 9879PER, 786-123-4568\n..."
+)
+submit_add_students_text = st.button("Agregar Estudiantes", type="primary")
 
-if uploaded_file is not None:
-    try:
-        if selected_course is None:
-            st.warning("Por favor, seleccione un curso antes de subir estudiantes.")
-            st.stop()
+# if uploaded_file is not None:
+#     try:
+#         if selected_course is None:
+#             st.warning("Por favor, seleccione un curso antes de subir estudiantes.")
+#             st.stop()
 
-        # Read the uploaded file
-        if uploaded_file.name.endswith('.csv'):
-            df_upload = pd.read_csv(uploaded_file)
-        else:  # Excel file
-            df_upload = pd.read_excel(uploaded_file)
+#         # Read the uploaded file
+#         if uploaded_file.name.endswith('.csv'):
+#             df_upload = pd.read_csv(uploaded_file)
+#         else:  # Excel file
+#             df_upload = pd.read_excel(uploaded_file)
 
-        # Normalize column names and handle case sensitivity
-        df_upload.columns = df_upload.columns.str.lower().str.strip()
+#         # Normalize column names and handle case sensitivity
+#         df_upload.columns = df_upload.columns.str.lower().str.strip()
 
-        # Ensure required columns exist
-        required_columns = {'nombre'}
-        missing_columns = required_columns - set(df_upload.columns)
+#         # Ensure required columns exist
+#         required_columns = {'nombre'}
+#         missing_columns = required_columns - set(df_upload.columns)
 
-        if missing_columns:
-            st.error(f"Error: El archivo subido no contiene las columnas requeridas: {', '.join(missing_columns)}. "
-                     f"Por favor asegúrese de que su archivo incluya al menos la columna: nombre")
-        else:
-            # Process required fields
-            df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
+#         if missing_columns:
+#             st.error(f"Error: El archivo subido no contiene las columnas requeridas: {', '.join(missing_columns)}. "
+#                      f"Por favor asegúrese de que su archivo incluya al menos la columna: nombre")
+#         else:
+#             # Process required fields
+#             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
 
-            # Initialize optional fields if they don't exist
-            optional_fields = {
-                'email': '',
-                'canvas_id': '',
-                'telefono': ''
-            }
+#             # Initialize optional fields if they don't exist
+#             optional_fields = {
+#                 'email': '',
+#                 'canvas_id': '',
+#                 'telefono': ''
+#             }
 
-            for field, default_value in optional_fields.items():
-                if field not in df_upload.columns:
-                    df_upload[field] = default_value
-                else:
-                    # Clean up the data
-                    df_upload[field] = df_upload[field].fillna('').astype(str).str.strip()
+#             for field, default_value in optional_fields.items():
+#                 if field not in df_upload.columns:
+#                     df_upload[field] = default_value
+#                 else:
+#                     # Clean up the data
+#                     df_upload[field] = df_upload[field].fillna('').astype(str).str.strip()
 
-            # Get the selected module's details if available
-            module_info = {}
-            if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
-                module_info = {
-                    'fecha_inicio': st.session_state.selected_module.get('start_date'),
-                    'fecha_fin': st.session_state.selected_module.get('end_date'),
-                    'modulo': st.session_state.selected_module.get('module_name'),
-                    'ciclo': st.session_state.selected_module.get('ciclo'),
-                    'firebase_key': st.session_state.selected_module_id
-                }
+#             # Get the selected module's details if available
+#             module_info = {}
+#             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
+#                 module_info = {
+#                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
+#                     'fecha_fin': st.session_state.selected_module.get('end_date'),
+#                     'modulo': st.session_state.selected_module.get('module_name'),
+#                     'ciclo': st.session_state.selected_module.get('ciclo'),
+#                     'firebase_key': st.session_state.selected_module_id
+#                 }
 
-                if module_info['fecha_inicio'] and module_info['fecha_fin'] and isinstance(module_info['fecha_inicio'], str) and isinstance(module_info['fecha_fin'], str):
-                    try:
-                        # Convert to datetime and format consistently
-                        module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
-                        module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
-                        # Add module info to all uploaded students
-                        df_upload['fecha_inicio'] = module_info['fecha_inicio']
-                        df_upload['fecha_fin'] = module_info['fecha_fin']
-                        df_upload['modulo'] = module_info['modulo']
-                        df_upload['ciclo'] = module_info['ciclo']
-                        df_upload['modulo_id'] = module_info['firebase_key']
-                    except (ValueError, TypeError):
-                        module_info = {}  # Reset if date conversion fails
+#                 if module_info['fecha_inicio'] and module_info['fecha_fin'] and isinstance(module_info['fecha_inicio'], str) and isinstance(module_info['fecha_fin'], str):
+#                     try:
+#                         # Convert to datetime and format consistently
+#                         module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
+#                         module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
+#                         # Add module info to all uploaded students
+#                         df_upload['fecha_inicio'] = module_info['fecha_inicio']
+#                         df_upload['fecha_fin'] = module_info['fecha_fin']
+#                         df_upload['modulo'] = module_info['modulo']
+#                         df_upload['ciclo'] = module_info['ciclo']
+#                         df_upload['modulo_id'] = module_info['firebase_key']
+#                     except (ValueError, TypeError):
+#                         module_info = {}  # Reset if date conversion fails
 
-            st.subheader("Vista Previa del Archivo Subido")
-            st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
-            if module_info.get('fecha_inicio'):
-                st.info(f"Se asignará el módulo '{module_info['modulo']}' con fecha de inicio: {module_info['fecha_inicio']}")
-            st.dataframe(df_upload)
+#             st.subheader("Vista Previa del Archivo Subido")
+#             st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
+#             if module_info.get('fecha_inicio'):
+#                 st.info(f"Se asignará el módulo '{module_info['modulo']}' con fecha de inicio: {module_info['fecha_inicio']}")
+#             st.dataframe(df_upload)
 
-            if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)", key="save_uploaded_students_btn"):
-                if admin_save_students(selected_course, df_upload): # Pass selected_course
-                    st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
-                    st.session_state.students_df_by_course[selected_course] = df_upload.copy() # Update session state copy
-                    st.session_state.editor_key += 1 # Increment key to force data_editor refresh
-                    get_current_students_data.clear() # Clear the cache for the loading function
-                    time.sleep(1)
-                    st.rerun()
+#             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)", key="save_uploaded_students_btn"):
+#                 if admin_save_students(selected_course, df_upload): # Pass selected_course
+#                     st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
+#                     st.session_state.students_df_by_course[selected_course] = df_upload.copy() # Update session state copy
+#                     st.session_state.editor_key += 1 # Increment key to force data_editor refresh
+#                     get_current_students_data.clear() # Clear the cache for the loading function
+#                     time.sleep(1)
+#                     st.rerun()
 
-    except Exception as e:
-        st.error(f"Error procesando el archivo: {str(e)}")
-        st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
+#     except Exception as e:
+#         st.error(f"Error procesando el archivo: {str(e)}")
+#         st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
 
 # --- Add Multiple Students via Text Area ---
 if 'text_area_input' in st.session_state and st.session_state.text_area_input and submit_add_students_text:
@@ -453,7 +453,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 # ---- Section Students Display and Management ---
 
 if df_loaded is not None and not df_loaded.empty:
-    st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
+    # st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
     st.divider()
 
 st.subheader(f"Estudiantes Actuales en el curso {selected_course.capitalize().split('@')[0] if selected_course else 'No Seleccionado'} (Total: {len(df_loaded) if df_loaded is not None else 0})")
