@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
 import datetime # Added for type hinting and date operations
+from auth_utils import require_auth
 
+@require_auth
 def get_last_updated(table_name, user_email=None):
     """
     Fetch the last_updated timestamp for a given table from Firebase metadata.

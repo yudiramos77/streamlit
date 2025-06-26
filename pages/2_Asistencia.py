@@ -7,13 +7,18 @@ import time
 from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated
 from config import setup_page, db
 
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
+# --- Session Check ---
+# This block now checks for both login status AND a valid session structure
+# required by the authentication utility functions.
+if (
+    not st.session_state.get("logged_in")
+    or "token_expires_at" not in st.session_state
+    or st.session_state.get("token_expires_at") is None
+):
     st.error("Debe iniciar sesión para acceder a esta página.")
-    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.info("Si el problema persiste, es posible que su sesión anterior haya caducado. Por favor, regrese a la página de Login y vuelva a iniciar sesión.")
     st.stop()
+# --- End Session Check ---
 
 setup_page("Gestión de Asistencia")
 
