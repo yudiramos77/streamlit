@@ -26,8 +26,9 @@ else:
                 st.Page("pages/4_Modulos_admin.py", title="📚 Módulos")
             ],
             "Reportes": [
+                st.Page("pages/6_Buscar_estudiantes_Admin.py", title="🔍 Buscar"),
                 st.Page("pages/5_Reporte_estudiantes_admin.py", title="🎓 Estudiantes"),
-                st.Page("pages/6_Buscar_estudiantes_Admin.py", title="🔍 Buscar")
+                st.Page("pages/3_Reportes_admin.py", title="📅 Asistencia")
             ],
         }
     else:

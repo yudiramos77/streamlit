@@ -18,6 +18,7 @@ def admin_get_last_updated(table_name, course_email):
     Returns:
         str or None: The last_updated ISO timestamp, or None if not found.
     """
+    print("\n\admin_get_last_updated", course_email)
     if course_email:
         course_email = course_email.replace('.', ',')
         ref = db.child("metadata").child(table_name).child(course_email)
@@ -913,6 +914,42 @@ def admin_save_attendance(date: datetime.date, attendance_data: list, course_ema
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
+
+@st.cache_data
+def admin_get_attendance_dates(email: str, attendance_last_updated: str):
+    """
+    Get a list of all dates with saved attendance records.
+    Returns a sorted list of date strings in 'YYYY-MM-DD' format.
+    """
+    print("\n\nattendance_last_updated", attendance_last_updated)
+    print("\n\nemail", email)
+    try:
+        user_email = email.replace('.', ',')
+        docs = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_attendance_dates-data from firebase----\n{str(docs)[:100]}...")
+
+        if not docs:
+            return []
+            
+        # Extract dates and filter out any None or invalid dates
+        dates = []
+        for doc in docs:
+            try:
+                # Validate date format                    
+                datetime.datetime.strptime(doc, '%Y-%m-%d')
+                dates.append(doc)
+            except (ValueError, TypeError):
+                continue
+        # Sort dates chronologically
+        return sorted(dates)
+    except Exception as e:
+        st.error(f"Error loading attendance dates: {str(e)}")
+        return []
+
 
 # students
 #     cba2@iti,edu
