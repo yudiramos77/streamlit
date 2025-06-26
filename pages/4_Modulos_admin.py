@@ -12,12 +12,12 @@ if not st.session_state.get('logged_in', False):
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
 
-if st.button("Limpiar Sesión"):
-    st.session_state.modules_df_by_course = {}
-    st.session_state.editor_key = 0
-    st.session_state.force_refresh = False
-    st.success("Sesión borrada. Recargando...")
-    st.rerun()
+# if st.button("Limpiar Sesión"):
+#     st.session_state.modules_df_by_course = {}
+#     st.session_state.editor_key = 0
+#     st.session_state.force_refresh = False
+#     st.success("Sesión borrada. Recargando...")
+#     st.rerun()
 
 # --- Initialize session state variables at the very top ---
 # This ensures they exist before any part of the script tries to access them.
