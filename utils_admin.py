@@ -18,6 +18,7 @@ def admin_get_last_updated(table_name, course_email):
     Returns:
         str or None: The last_updated ISO timestamp, or None if not found.
     """
+    print("\n\admin_get_last_updated", course_email)
     if course_email:
         course_email = course_email.replace('.', ',')
         ref = db.child("metadata").child(table_name).child(course_email)
@@ -913,6 +914,91 @@ def admin_save_attendance(date: datetime.date, attendance_data: list, course_ema
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
+
+@st.cache_data
+def admin_get_attendance_dates(email: str, attendance_last_updated: str):
+    """
+    Get a list of all dates with saved attendance records.
+    Returns a sorted list of date strings in 'YYYY-MM-DD' format.
+    """
+    print("\n\nattendance_last_updated", attendance_last_updated)
+    print("\n\nemail", email)
+    try:
+        user_email = email.replace('.', ',')
+        docs = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_attendance_dates-data from firebase----\n{str(docs)[:100]}...")
+
+        if not docs:
+            return []
+            
+        # Extract dates and filter out any None or invalid dates
+        dates = []
+        for doc in docs:
+            try:
+                # Validate date format                    
+                datetime.datetime.strptime(doc, '%Y-%m-%d')
+                dates.append(doc)
+            except (ValueError, TypeError):
+                continue
+        # Sort dates chronologically
+        return sorted(dates)
+    except Exception as e:
+        st.error(f"Error loading attendance dates: {str(e)}")
+        return []
+
+@st.cache_data
+def admin_get_attendance(email: str, attendance_last_updated: str):
+    """
+    Get a list of all dates with saved attendance records.
+    Returns a sorted list of date strings in 'YYYY-MM-DD' format.
+    """
+    # print("\n\nattendance_last_updated", attendance_last_updated)
+    # print("\n\nemail", email)
+    try:
+        user_email = email.replace('.', ',')
+        docs = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val() or {}
+        return docs
+    except Exception as e:
+        st.error(f"Error loading attendance dates: {str(e)}")
+        return []
+
+@st.cache_data(ttl=60*60*2) # 2 hours 
+def admin_load_attendance(course_email: str, date: datetime.date, attendance_last_updated: str) -> dict:
+    """Load attendance data from Firebase for a specific date."""
+    try:
+        user_email = course_email.replace('.', ',')
+        date_str = date.strftime('%Y-%m-%d')
+        raw_data = db.child("attendance").child(user_email).child(date_str).get(token=st.session_state.user_token).val()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---load attendance data from firebase----\n", raw_data)
+        
+        if isinstance(raw_data, list):
+            # Convert list of records to a dictionary keyed by student name
+            processed_data = {}
+            for record in raw_data:
+                if isinstance(record, dict) and 'Nombre' in record:
+                    # Ensure we don't overwrite if names aren't unique, though they should be per day
+                    processed_data[record['Nombre']] = record 
+                # else: st.warning(f"Skipping invalid record in list for {date_str}: {record}") # Optional: log bad records
+            return processed_data
+        elif isinstance(raw_data, dict):
+            # If it's already a dict (e.g., older data or different save format), return as is
+            return raw_data
+        else:
+            # No data or unexpected type
+            return {}
+            
+    except Exception as e:
+        st.error(f"Error loading attendance for {date_str}: {str(e)}")
+        return {}
+
 
 # students
 #     cba2@iti,edu
