@@ -4,7 +4,7 @@ import urllib.parse
 import datetime
 from config import setup_page, db
 from utils import create_filename_date_range, get_student_email, get_student_start_date, get_student_phone, date_format
-from utils_admin import admin_get_student_group_emails, admin_load_students, admin_get_last_updated
+from utils_admin import admin_get_student_group_emails, admin_load_students, admin_get_last_updated, admin_get_attendance
 
 # --- Session Check ---
 if not st.session_state.get("logged_in"):
@@ -53,8 +53,11 @@ def load_data_into_session(course_email):
 
             # Load ALL attendance records for the course into a dictionary
             try:
+                attendance_last_updated = admin_get_last_updated('attendance', course_email)
+                # print("\n\nattendance_last_updated", attendance_last_updated)
                 user_email_db_key = course_email.replace('.', ',')
-                all_records = db.child("attendance").child(user_email_db_key).get(token=st.session_state.user_token).val() or {}
+                all_records = admin_get_attendance(user_email_db_key, attendance_last_updated)
+
                 st.session_state.attendance_records = all_records
             except Exception as e:
                 st.error(f"No se pudieron cargar los registros de asistencia: {e}")

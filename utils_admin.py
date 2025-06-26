@@ -950,6 +950,22 @@ def admin_get_attendance_dates(email: str, attendance_last_updated: str):
         st.error(f"Error loading attendance dates: {str(e)}")
         return []
 
+@st.cache_data
+def admin_get_attendance(email: str, attendance_last_updated: str):
+    """
+    Get a list of all dates with saved attendance records.
+    Returns a sorted list of date strings in 'YYYY-MM-DD' format.
+    """
+    # print("\n\nattendance_last_updated", attendance_last_updated)
+    # print("\n\nemail", email)
+    try:
+        user_email = email.replace('.', ',')
+        docs = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val() or {}
+        return docs
+    except Exception as e:
+        st.error(f"Error loading attendance dates: {str(e)}")
+        return []
+
 @st.cache_data(ttl=60*60*2) # 2 hours 
 def admin_load_attendance(course_email: str, date: datetime.date, attendance_last_updated: str) -> dict:
     """Load attendance data from Firebase for a specific date."""
