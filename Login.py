@@ -1,7 +1,7 @@
 import streamlit as st
 import pyrebase
 from config import auth, db
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
@@ -9,7 +9,9 @@ from datetime import datetime
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.email = None
+    st.session_state.user = None # To store the full user object from Firebase
     st.session_state.user_token = None # To store Firebase token
+    st.session_state.token_expires_at = None # To store the token's expiration time
     st.session_state.admin = False
 
 def login_user(email, password):
@@ -17,7 +19,14 @@ def login_user(email, password):
         user = auth.sign_in_with_email_and_password(email, password)
         st.session_state.logged_in = True
         st.session_state.email = user['email']
+        st.session_state.user = user # Store the full user object
         st.session_state.user_token = user['idToken'] # Store the token
+
+        # Calculate and store the token's exact expiration time
+        login_time = datetime.now()
+        token_lifetime = timedelta(seconds=int(user['expiresIn']))
+        st.session_state.token_expires_at = login_time + token_lifetime
+
         if 'admin' in email.lower():
             st.session_state.admin = True
         else:
@@ -26,7 +35,8 @@ def login_user(email, password):
         st.rerun()
     except Exception as e: # Catch generic Firebase errors or others
         st.error(f"Error de inicio de sesión: Usuario o contraseña incorrectos.")
-        # st.error(f"Detalles del error: {e}") # For debugging, if needed
+        # st.error(f"AQUÍ ESTÁ EL ERROR REAL: {e}") # UNCOMMENT THIS LINE
+        # st.error(f"TIPO DE ERROR: {type(e)}") # ALSO ADD THIS LINE
 
 def logout_user():
     st.session_state.logged_in = False

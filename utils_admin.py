@@ -13,13 +13,14 @@ def admin_get_last_updated(table_name, course_email):
     
     Args:
         table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+        course_email (str): The email of the course to get the last updated timestamp for
     
     Returns:
         str or None: The last_updated ISO timestamp, or None if not found.
     """
-    if user_email:
-        user_email = user_email.replace('.', ',')
-        ref = db.child("metadata").child(table_name).child(user_email)
+    if course_email:
+        course_email = course_email.replace('.', ',')
+        ref = db.child("metadata").child(table_name).child(course_email)
         snapshot = ref.get(token=st.session_state.user_token)
         if snapshot.val() is not None:
             metadata = snapshot.val()
@@ -111,7 +112,7 @@ def admin_get_students_by_email(email):
         print(f"Error querying students by email key '{email}': {str(e)}")
         return {}
 
-@st.cache_data
+@st.cache_data(ttl=60*60*5) # 5 hours
 def admin_get_student_group_emails():
     """
     Retrieves the top-level email keys (representing student groups)
@@ -789,6 +790,129 @@ def find_students(search_term: str, course_email: str = None, status: str = "in_
         # st.error(f"Error al buscar estudiantes: {e}\n{traceback.format_exc()}")
         st.error(f"Error al buscar estudiantes: {e}")
         return pd.DataFrame(columns=list(expected_columns.keys())) # Ensure expected_columns is defined or passed
+
+def admin_delete_attendance_dates(dates_to_delete=None, delete_all=False, course_email=None):
+    """
+    Delete attendance records for the specified dates or all records if delete_all=True.
+    
+    Args:
+        dates_to_delete (list, optional): List of date strings in 'YYYY-MM-DD' format.
+        delete_all (bool, optional): If True, deletes all attendance records for the user.
+        
+    Returns:
+        bool: True if at least one deletion was successful, False otherwise.
+    """
+    print(f"Intentando eliminar fechas: {dates_to_delete}, delete_all={delete_all} DESDE utils")
+    success = False
+
+    if dates_to_delete:
+            print(f"✅ Entrando al bloque para eliminar fechas específicas: {dates_to_delete}")
+            success_count = 0
+            
+            # Loop through the list of date STRINGS (e.g., '06/20/2025')
+            for date_str_mmddyyyy in dates_to_delete:
+                try:
+                    # 1. PARSE the string from 'MM/DD/YYYY' format into a datetime object.
+                    date_obj = datetime.datetime.strptime(date_str_mmddyyyy, '%m/%d/%Y')
+                    
+                    # 2. FORMAT that datetime object into the 'YYYY-MM-DD' string needed for the Firebase key.
+                    date_key = date_obj.strftime('%Y-%m-%d')
+                    
+                    print(f"  -> Intentando eliminar la llave: {date_key}") # New debug print
+                    
+                    # 3. Remove the specific date node from Firebase using the correct key.
+                    db.child("attendance").child(course_email).child(date_key).remove(token=st.session_state.user_token)
+                    success_count += 1
+                except ValueError:
+                    st.warning(f"Formato de fecha inválido, omitiendo: '{date_str_mmddyyyy}'")
+                except Exception as e:
+                    st.warning(f"No se pudo eliminar la fecha '{date_str_mmddyyyy}': {e}")
+            
+            # Return True only if at least one date was successfully deleted
+            return success_count > 0
+
+    try:
+        user_email_key = course_email.replace('.', ',')
+        user_base_attendance_path = f"attendance/{user_email_key}"
+
+        if delete_all:
+            # This case is for explicitly deleting ALL records for the user
+            all_user_records_ref = db.child(user_base_attendance_path)
+            print(f"WARNING: Attempting to delete ALL attendance records at path: {all_user_records_ref.path}")
+            
+            if not all_user_records_ref.path or all_user_records_ref.path == '/' or not all_user_records_ref.path.startswith('attendance/'):
+                st.error(f"CRITICAL SAFETY HALT: Unsafe path for full deletion: '{all_user_records_ref.path}'. Aborting.")
+                print(f"CRITICAL SAFETY HALT: Unsafe full deletion path: {all_user_records_ref.path}")
+                return False
+
+            try:
+                all_user_records_ref.remove(token=st.session_state.user_token)
+                admin_set_last_updated('attendance', course_email)
+                return True
+            except Exception as e:
+                print(f"ERROR: Failed to remove all records: {str(e)}")
+                st.error(f"Error al eliminar todos los registros: {str(e)}")
+                return False
+
+        # If no dates provided, we don’t do anything
+        if not dates_to_delete:
+            st.warning("No dates provided for deletion.")
+            print("INFO: No dates provided, skipping deletion.")
+            return False
+
+        # Validate and clean dates
+        valid_dates = []
+        for date_str in dates_to_delete:
+            try:
+                date_str = datetime.datetime.strptime(date_str, '%m/%d/%Y').strftime('%Y-%m-%d')
+                valid_dates.append(date_str.strip())
+            except ValueError:
+                st.warning(f"Formato de fecha inválido: {date_str}. Se omitirá.")
+                print(f"WARNING: Invalid date format '{date_str}' ignored.")
+
+        if not valid_dates:
+            st.error("No hay fechas válidas para eliminar después de la validación.")
+            print("ERROR: No valid dates to process after validation.")
+            return False
+
+        # Delete each valid date
+        for date_str in valid_dates:
+            full_path = f"{user_base_attendance_path}/{date_str}"
+            ref_for_get = db.child(full_path)
+            data_snapshot = ref_for_get.get(token=st.session_state.user_token)
+
+            if data_snapshot.val() is not None:
+                print(f"INFO: Removing data at path: {full_path}")
+                try:
+                    db.child(full_path).remove(token=st.session_state.user_token)
+                    admin_set_last_updated('attendance', course_email)
+                    success = True
+                except Exception as e:
+                    print(f"ERROR: Failed to remove date {date_str}: {str(e)}")
+                    st.error(f"Error al eliminar la fecha {date_str}: {str(e)}")
+            else:
+                print(f"INFO: No data found for date {date_str}, skipping.")
+
+        return success
+
+    except Exception as e:
+        st.error(f"Error deleting attendance records: {str(e)}")
+        print(f"EXCEPTION: {str(e)}")
+        return False
+
+def admin_save_attendance(date: datetime.date, attendance_data: list, course_email: str):
+    """Save attendance data to Firebase for a specific date."""
+    try:
+        user_email = course_email.replace('.', ',')
+        date_str = date.strftime('%Y-%m-%d')
+        # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
+        # For now, assuming they are simple strings.
+        db.child("attendance").child(user_email).child(date_str).set(attendance_data, token=st.session_state.user_token)
+        admin_set_last_updated('attendance', user_email)
+        return True
+    except Exception as e:
+        st.error(f"Error saving attendance for {date_str}: {str(e)}")
+        return False
 
 # students
 #     cba2@iti,edu

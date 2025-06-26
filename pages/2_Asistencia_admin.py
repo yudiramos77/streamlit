@@ -4,7 +4,8 @@ import datetime
 import re
 import io
 import time
-from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated
+from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated, get_available_modules
+from utils_admin import admin_get_student_group_emails, admin_load_students, admin_get_available_modules, admin_get_last_updated, admin_delete_attendance_dates, admin_save_attendance
 from config import setup_page, db
 
 # --- Session Check ---
@@ -76,14 +77,17 @@ if 'to_delete' not in st.session_state:
     st.session_state.to_delete = []
 if 'edit_dates_list' not in st.session_state:
     st.session_state.edit_dates_list = []
+if 'students_df_by_course' not in st.session_state:
+    st.session_state.students_df_by_course = {}
 
-def update_attendance_session_state():
-    attendance_last_updated = get_last_updated('attendance', st.session_state.email)
+def update_attendance_session_state(email):
+    # print("\n\nemail", email)
+    attendance_last_updated = admin_get_last_updated('attendance', email)
     
     if (st.session_state.attendance_data['last_updated'] != attendance_last_updated or 
             not st.session_state.attendance_data['dates']):
         try:
-            user_email = st.session_state.email.replace('.', ',')
+            user_email = email.replace('.', ',')
             all_dates = db.child("attendance").child(user_email).get(token=st.session_state.user_token).val() or {}
             
             st.session_state.attendance_data = {
@@ -197,8 +201,8 @@ def edit_selected_dialog():
         st.stop()
 
     date_key = datetime.datetime.strptime(selected_date_str, '%m/%d/%Y').strftime('%Y-%m-%d')
-    students_last_updated = get_last_updated('students')
-    students_df_master, _ = load_students(students_last_updated)
+    students_last_updated = admin_get_last_updated('students', selected_course)
+    students_df_master, _ = admin_load_students(selected_course, students_last_updated)
 
     if students_df_master is None or students_df_master.empty:
         st.error("Lista de estudiantes no encontrada. Por favor, súbala en la página de 'Gestión de Estudiantes'.")
@@ -263,13 +267,21 @@ def edit_selected_dialog():
         if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
             try:
                 updated_records_for_db = edited_df_in_dialog.to_dict('records')
-
                 date_obj = datetime.datetime.strptime(date_key, '%Y-%m-%d').date()
-                if save_attendance(date_obj, updated_records_for_db):
+                if admin_save_attendance(date_obj, updated_records_for_db, selected_course):
                     st.session_state.attendance_data['records'][date_key] = updated_records_for_db
                     st.session_state.attendance_data['last_updated'] = datetime.datetime.now().isoformat()
-                    st.toast("¡Cambios guardados!", icon="✅")
-                    time.sleep(1)
+                    st.success("¡Cambios guardados correctamente!")
+
+                    
+                    # # 1. Hide the dialog
+                    # st.session_state.show_edit_dialog = False
+                    # # 2. Clear the list of dates that were being edited
+                    # st.session_state.edit_dates_list = []
+                    # # 3. Increment the key counter to force the data_editor to reset
+                    # st.session_state.editor_key_counter += 1
+                    # # 4. Rerun the script to apply all changes
+                    # st.rerun()
                     
                     
                 else:
@@ -281,13 +293,10 @@ def edit_selected_dialog():
         if st.button("❌ Cerrar y Finalizar Edición"):
             # 1. Hide the dialog
             st.session_state.show_edit_dialog = False
-            
             # 2. Clear the list of dates that were being edited
             st.session_state.edit_dates_list = []
-            
             # 3. Increment the key counter to force the data_editor to reset
             st.session_state.editor_key_counter += 1
-            
             # 4. Rerun the script to apply all changes
             st.rerun()
 
@@ -308,7 +317,7 @@ def confirm_delete_selected_dialog():
     with col1:
         if st.button("✅ Sí, eliminar", type="primary"):
             try:
-                if delete_attendance_dates(st.session_state.to_delete):
+                if admin_delete_attendance_dates(dates_to_delete=st.session_state.to_delete, course_email=selected_course):
                     for date_str in st.session_state.to_delete:
                         try:
                             date_key = datetime.datetime.strptime(date_str, '%m/%d/%Y').strftime('%Y-%m-%d')
@@ -321,7 +330,7 @@ def confirm_delete_selected_dialog():
                     st.session_state.uploader_key_suffix += 1
                     st.session_state.to_delete = []
                     reset_dialog_states()
-                    st.success("Asistencias eliminadas exitosamente.")
+                    # st.success("Asistencias eliminadas exitosamente.")
                     st.rerun()
                 else:
                     st.error("Error al eliminar las asistencias seleccionadas.")
@@ -342,7 +351,7 @@ def confirm_delete_all_dialog():
     with col1:
         if st.button("✅ Sí, eliminar todo", type="primary", use_container_width=True):
             try:
-                if delete_attendance_dates(delete_all=True):
+                if admin_delete_attendance_dates(delete_all=True, course_email=selected_course):
                     st.session_state.current_batch_data_by_date = {}
                     st.session_state.prepared_attendance_dfs = {}
                     st.session_state.processed_files_this_session = set()
@@ -365,11 +374,106 @@ def confirm_delete_all_dialog():
             # Rerun the script to make the dialog disappear
             st.rerun()
     
-attendance_data = update_attendance_session_state()
-all_attendance_dates = attendance_data['dates']
+# --- Select Course ---
+st.subheader("1. Seleccionar Curso")
+
+# Get available courses (emails)
+course_emails = admin_get_student_group_emails()
+
+selected_course = None # Initialize selected_course before the if/else block
+
+if course_emails:
+    full_emails_for_options = course_emails.copy() # Good practice to copy if you modify original later
+    course_options = {
+        email: {
+            'label': email.capitalize().split('@')[0], # Display part without domain
+            'value': email                              # Full email with domain
+        }
+        for email in full_emails_for_options
+    }
+
+    selected_course = st.selectbox(
+        "Seleccione un Curso para agregar a los nuevos estudiantes:",
+        options=full_emails_for_options,
+        format_func=lambda x: course_options[x]['label'],
+        index=0,
+        key="course_selector" # Added key for consistency
+    )
+
+    attendance_data = update_attendance_session_state(selected_course)
+    all_attendance_dates = attendance_data['dates']
+
+else:
+    st.warning("No se encontraron cursos disponibles.")
+    selected_course = None # Ensure it's explicitly None if no courses
+
+def get_end_date(start_date, num_weeks):
+    try:
+        if isinstance(start_date, str):
+            start_date = datetime.datetime.fromisoformat(start_date)
+        elif isinstance(start_date, datetime.date):
+            start_date = datetime.datetime.combine(start_date, datetime.time.min)
+
+        start_date = start_date.date()  # <-- línea clave para evitar el error
+
+        break_data = load_breaks_from_db()
+        break_list = parse_breaks(break_data)
+        end_date = calculate_end_date(start_date, num_weeks, break_list)
+
+        print("\n\nend_date", end_date)
+        return end_date.isoformat()
+    except (ValueError, TypeError) as e:
+        print("❌ Error al calcular la fecha final:", e)
+        return None
+
+def get_weeks(selected_course):
+    total_duration_weeks = 0
+    modules = selected_course  # 'modules' is a list of dictionaries
+    
+    # Iterate directly over the list
+    for module in modules:
+        # Access the value using the dictionary key
+        total_duration_weeks += module['duration_weeks']
+        
+    return total_duration_weeks
+    
+# --- Cached Student Data Loading Function ---
+# This function will load student data from the database and cache it.
+# It will re-run only if selected_course changes or the cache is explicitly cleared.
+@st.cache_data(ttl=3600) # Cache data for 1 hour
+def get_current_students_data(course_email, students_last_updated):
+    """Loads student data for the given course email, optimized with caching."""
+    if not course_email:
+        return pd.DataFrame(), None # Return empty DataFrame if no course is selected
+    # st.info(f"Cargando estudiantes para el curso: {course_email.capitalize().split('@')[0]}...")
+    df, timestamp = admin_load_students(course_email, students_last_updated)
+    st.success("Estudiantes cargados exitosamente." if df is not None else "Error al cargar estudiantes.")
+    return df, timestamp
+
+# --- Load current students based on selected_course ---
+# This block uses the cached function and stores the result in session state.
+# This ensures the database is read only once per course per session.
+if selected_course:
+    if selected_course not in st.session_state.students_df_by_course:
+        students_last_updated = admin_get_last_updated('students', selected_course)
+        df_loaded, _ = admin_load_students(selected_course, students_last_updated) # Use the cached function
+        if df_loaded is not None:
+            st.session_state.students_df_by_course[selected_course] = df_loaded
+        else:
+            st.session_state.students_df_by_course[selected_course] = pd.DataFrame() # Store an empty DataFrame on failure
+            st.warning(f"No se pudieron cargar estudiantes para el curso: {selected_course}. Iniciando con una lista vacía.")
+    else:
+        df_loaded = st.session_state.students_df_by_course[selected_course]
+else:
+    df_loaded = pd.DataFrame() # Provide an empty DataFrame if no course is selected
+    st.info("Por favor, seleccione un curso para cargar los estudiantes.")
+
+# print("\nLoaded df_loaded (from DB/Session State):\n", df_loaded)
+# print("\nSession State (students_df_by_course):\n", st.session_state.students_df_by_course)
+
 
 if all_attendance_dates:
-    st.header("Archivos de Asistencia guardados")
+    st.subheader(f"2. Archivos de Asistencia para el curso: **{selected_course.split('@')[0]}**")
     with st.expander("Ver y editar lista de fechas", expanded=True):
         try:
             dates_df = pd.DataFrame({
@@ -529,8 +633,8 @@ if uploaded_reports and st.session_state.current_batch_data_by_date:
     st.divider()
     st.subheader("Paso 2: Preparar Tablas de Asistencia")
     if st.button("Preparar Tablas de Asistencia para Edición"):
-        students_last_updated = get_last_updated('students')
-        students_df, _ = load_students(students_last_updated)
+        students_last_updated = admin_get_last_updated('students', selected_course)
+        students_df, _ = admin_load_students(selected_course, students_last_updated)
         if students_df is None or students_df.empty:
             st.error("No se encontraron datos de estudiantes. Por favor, suba una lista de estudiantes en la página 'Gestión de Estudiantes' primero.")
             st.stop()
@@ -572,7 +676,7 @@ if st.session_state.prepared_attendance_dfs:
             for date_obj, df in st.session_state.prepared_attendance_dfs.items():
                 date_str = date_obj.strftime('%Y-%m-%d')
                 attendance_data_to_save = df.to_dict('records')
-                if save_attendance(date_obj, attendance_data_to_save):
+                if admin_save_attendance(date_obj, attendance_data_to_save, selected_course):
                     saved_count += 1
                 else:
                     save_success = False
@@ -581,7 +685,7 @@ if st.session_state.prepared_attendance_dfs:
                 st.toast("¡Informes guardados exitosamente!", icon="✅")
                 st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
                 st.balloons()
-                update_attendance_session_state()
+                update_attendance_session_state(selected_course)
                 st.session_state.current_batch_data_by_date = {}
                 st.session_state.prepared_attendance_dfs = {}
                 st.session_state.processed_files_this_session = set()
@@ -621,8 +725,8 @@ if st.session_state.prepared_attendance_dfs:
             with col1:
                 if st.button(f"💾 Guardar {selected_date_str}", key=f"save_{selected_date_str}"):
                     attendance_data_to_save = edited_df.to_dict('records')
-                    if save_attendance(selected_date_obj, attendance_data_to_save):
-                        update_attendance_session_state()
+                    if admin_save_attendance(selected_date_obj, attendance_data_to_save, selected_course):
+                        update_attendance_session_state(selected_course)
                         st.success(f"¡Asistencia guardada exitosamente para {selected_date_str}!")
                         del st.session_state.prepared_attendance_dfs[selected_date_obj]
                         st.rerun()
