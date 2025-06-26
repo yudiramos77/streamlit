@@ -166,6 +166,7 @@ def edit_selected_dialog():
             st.rerun()
         return
 
+
     selected_date_str = st.selectbox(
         "Seleccione la fecha que desea editar:",
         options=st.session_state.edit_dates_list,

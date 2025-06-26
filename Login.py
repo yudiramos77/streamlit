@@ -35,8 +35,8 @@ def login_user(email, password):
         st.rerun()
     except Exception as e: # Catch generic Firebase errors or others
         st.error(f"Error de inicio de sesión: Usuario o contraseña incorrectos.")
-        st.error(f"AQUÍ ESTÁ EL ERROR REAL: {e}") # UNCOMMENT THIS LINE
-        st.error(f"TIPO DE ERROR: {type(e)}") # ALSO ADD THIS LINE
+        # st.error(f"AQUÍ ESTÁ EL ERROR REAL: {e}") # UNCOMMENT THIS LINE
+        # st.error(f"TIPO DE ERROR: {type(e)}") # ALSO ADD THIS LINE
 
 def logout_user():
     st.session_state.logged_in = False
