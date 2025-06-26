@@ -13,13 +13,14 @@ def admin_get_last_updated(table_name, course_email):
     
     Args:
         table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+        course_email (str): The email of the course to get the last updated timestamp for
     
     Returns:
         str or None: The last_updated ISO timestamp, or None if not found.
     """
-    if user_email:
-        user_email = user_email.replace('.', ',')
-        ref = db.child("metadata").child(table_name).child(user_email)
+    if course_email:
+        course_email = course_email.replace('.', ',')
+        ref = db.child("metadata").child(table_name).child(course_email)
         snapshot = ref.get(token=st.session_state.user_token)
         if snapshot.val() is not None:
             metadata = snapshot.val()
@@ -111,7 +112,7 @@ def admin_get_students_by_email(email):
         print(f"Error querying students by email key '{email}': {str(e)}")
         return {}
 
-@st.cache_data
+@st.cache_data(ttl=60*60*5) # 5 hours
 def admin_get_student_group_emails():
     """
     Retrieves the top-level email keys (representing student groups)
