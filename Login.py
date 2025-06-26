@@ -39,11 +39,27 @@ def login_user(email, password):
         # st.error(f"TIPO DE ERROR: {type(e)}") # ALSO ADD THIS LINE
 
 def logout_user():
-    st.session_state.logged_in = False
-    st.session_state.email = None
-    st.session_state.user_token = None
-    st.session_state.clear()
+
     # Potentially clear other session state variables related to the user
+    user_session_keys = [
+        'logged_in',
+        'email',
+        'user',
+        'user_token',
+        'token_expires_at',
+        'admin',
+        'attendance_data',             # From Asistencia.py
+        'students_df_by_course',       # From Asistencia.py
+        'show_save_success',           # From Asistencia.py
+        'editor_key_counter'           # From Asistencia.py
+        # Add any other keys that store user data here
+    ]
+
+    # 2. Loop through the list and delete each key if it exists.
+    for key in user_session_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.session_state.clear()
     st.rerun()
 
 # --- Page Logic ---
