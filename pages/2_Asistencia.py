@@ -10,6 +10,7 @@ from config import setup_page, db
 # --- Session Check ---
 # This block now checks for both login status AND a valid session structure
 # required by the authentication utility functions.
+print(st.session_state)
 if (
     not st.session_state.get("logged_in")
     or "token_expires_at" not in st.session_state
