@@ -96,7 +96,8 @@ try:
     if all_attendance:
         st.caption("Asistencia(s) guardada(s):")
         # Display dates in a grid
-        all_badges = " ".join([f":gray-badge[:material/calendar_today: {datetime.datetime.strptime(date_str, '%Y-%m-%d').date().strftime('%m-%d-%Y')}] " for date_str in all_attendance])
+        current_week = [today - datetime.timedelta(days=today.weekday() + i) for i in range(7)]
+        all_badges = " ".join([f":green-badge[:material/calendar_today: {date.strftime('%m-%d-%Y')}]" if date in current_week else f":gray-badge[:material/calendar_today: {date.strftime('%m-%d-%Y')}] " for date in sorted({datetime.datetime.strptime(date_str, '%Y-%m-%d').date() for date_str in all_attendance})])
         st.markdown(all_badges)
     else:
         st.caption("No hay fechas con asistencia registrada")
