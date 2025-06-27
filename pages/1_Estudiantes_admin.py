@@ -341,7 +341,10 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             unique_potential_new_names_list = [] # To maintain order and process unique entries
 
             for entry in potential_new_entries:
-                parts = [p.strip() for p in entry.split(',', 3)]
+                parts = [p.strip() for p in entry.split(',', 3) if p.strip()] # Try to split with commas
+                if len(parts) < 2:
+                    parts = [p.strip() for p in entry.split('\t', 3) if p.strip()] # If not, try to split with tabs
+
                 name_candidate = parts[0] if len(parts) > 0 else ''
                 normalized_name_candidate = name_candidate.lower().strip()
 
@@ -351,6 +354,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 if normalized_name_candidate not in unique_potential_new_entries_set:
                     unique_potential_new_names_list.append(entry)
                     unique_potential_new_entries_set.add(normalized_name_candidate)
+                    # print("\n\nunique_potential_new_names_list", unique_potential_new_names_list)
                 else:
                     # Mark as skipped if duplicate within this input session
                     if name_candidate not in skipped_names: # Avoid adding same skipped name multiple times
@@ -393,7 +397,10 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         module_info = {} # Reset if date conversion fails
 
             for student_entry in unique_potential_new_names_list:
-                parts = [p.strip() for p in student_entry.split(',', 3)]
+                parts = [p.strip() for p in student_entry.split(',', 3) if p.strip()] # Try to split with commas
+                if len(parts) < 2:
+                    parts = [p.strip() for p in student_entry.split('\t', 3) if p.strip()] # If not, try to split with tabs
+
                 name = parts[0] if len(parts) > 0 else ''
                 email = parts[1] if len(parts) > 1 else ''
                 canvas_id = parts[2] if len(parts) > 2 else ''
@@ -436,6 +443,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 
                 new_students_df = pd.DataFrame(students_to_add_list_copy)
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
+
+                print("\n\nupdated_students_df", updated_students_df)
 
                 # print("\n\nupdated_students_df", updated_students_df)
                 if admin_save_students(selected_course, updated_students_df): # Pass selected_course

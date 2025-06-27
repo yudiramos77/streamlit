@@ -9,10 +9,12 @@ def smart_refresh_token():
     Checks if the user's token is about to expire and refreshes it only if needed.
     This is the core logic that checks the timer.
     """
+    # print("\n\nsmart_refresh_token expires at: ", st.session_state.token_expires_at)
+    # print("\n\nsmart_refresh_token now: ", st.session_state.token_expires_at - datetime.timedelta(minutes=5))
     if 'user' not in st.session_state or not st.session_state.user:
         return False
 
-    if datetime.datetime.now() >= st.session_state.token_expires_at - datetime.timedelta(seconds=60):
+    if datetime.datetime.now() >= st.session_state.token_expires_at - datetime.timedelta(minutes=5):
         try:
             refreshed_user = st.session_state.user.refresh(st.session_state.user['refreshToken'])
             st.session_state.user = refreshed_user

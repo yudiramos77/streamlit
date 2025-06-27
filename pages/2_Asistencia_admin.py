@@ -5,7 +5,7 @@ import re
 import io
 import time
 from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated, get_available_modules
-from utils_admin import admin_get_student_group_emails, admin_load_students, admin_get_available_modules, admin_get_last_updated, admin_delete_attendance_dates, admin_save_attendance
+from utils_admin import admin_get_student_group_emails, admin_load_students, admin_get_available_modules, admin_get_last_updated, admin_delete_attendance_dates, admin_save_attendance, admin_set_last_updated
 from config import setup_page, db
 
 # --- Session Check ---
@@ -324,6 +324,7 @@ def confirm_delete_selected_dialog():
                             if date_key in st.session_state.attendance_data['records']:
                                 del st.session_state.attendance_data['records'][date_key]
                                 st.session_state.attendance_data['dates'].remove(date_key)
+                            admin_set_last_updated('attendance', selected_course)
                         except ValueError:
                             continue
                     
@@ -357,6 +358,7 @@ def confirm_delete_all_dialog():
                     st.session_state.processed_files_this_session = set()
                     st.session_state.uploader_key_suffix += 1
                     st.session_state.attendance_data = {'last_updated': None, 'dates': [], 'records': {}}
+                    admin_set_last_updated('attendance', selected_course)
                     reset_dialog_states()
                     st.success("Todas las asistencias eliminadas exitosamente.")
                     st.rerun()
@@ -682,6 +684,7 @@ if st.session_state.prepared_attendance_dfs:
                     save_success = False
                     st.error(f"Error al guardar la asistencia para {date_str}.")
             if save_success and saved_count > 0:
+                admin_set_last_updated('attendance', selected_course)
                 st.toast("¡Informes guardados exitosamente!", icon="✅")
                 st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
                 st.balloons()
@@ -690,7 +693,7 @@ if st.session_state.prepared_attendance_dfs:
                 st.session_state.prepared_attendance_dfs = {}
                 st.session_state.processed_files_this_session = set()
                 st.session_state.uploader_key_suffix += 1
-                time.sleep(3)
+                time.sleep(2)
                 st.rerun()
             elif saved_count == 0:
                 st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
@@ -727,6 +730,7 @@ if st.session_state.prepared_attendance_dfs:
                     attendance_data_to_save = edited_df.to_dict('records')
                     if admin_save_attendance(selected_date_obj, attendance_data_to_save, selected_course):
                         update_attendance_session_state(selected_course)
+                        admin_set_last_updated('attendance', selected_course)
                         st.success(f"¡Asistencia guardada exitosamente para {selected_date_str}!")
                         del st.session_state.prepared_attendance_dfs[selected_date_obj]
                         st.rerun()
