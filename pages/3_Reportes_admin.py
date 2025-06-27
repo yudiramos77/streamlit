@@ -92,8 +92,28 @@ if selected_course:
 
     # 2. Select Date Range
     st.subheader("2. Seleccionar Rango de Fechas")
+    
+    # Initialize with default values
     today = datetime.date.today()
-    default_start_date = today.replace(day=1)
+    all_attendance_dates = sorted(st.session_state.attendance_records.keys())
+    min_attendance_date = min(all_attendance_dates) if all_attendance_dates else None
+    max_attendance_date = max(all_attendance_dates) if all_attendance_dates else None
+    attendance_date_range = f"{min_attendance_date} - {max_attendance_date}" if min_attendance_date and max_attendance_date else "No hay registros de asistencia"    
+    if all_attendance_dates:
+        min_attendance_date = min(all_attendance_dates)
+        max_attendance_date = max(all_attendance_dates)
+        # Ensure we have date objects for date operations
+        try:
+            today = datetime.datetime.strptime(max_attendance_date, '%Y-%m-%d').date()
+            min_date = datetime.datetime.strptime(min_attendance_date, '%Y-%m-%d').date()
+            default_start_date = min_date
+        except (ValueError, TypeError):
+            # Fallback to current month start if parsing fails
+            today = datetime.date.today()
+            default_start_date = today.replace(day=1)
+    else:
+        today = datetime.date.today()
+        default_start_date = today.replace(day=1)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -101,7 +121,8 @@ if selected_course:
     with col2:
         end_date = st.date_input("Fecha de Fin", value=today, key="report_end_date", format="MM/DD/YYYY")
 
-    all_attendance_dates = sorted(st.session_state.attendance_records.keys())
+    
+
     if all_attendance_dates:
         st.caption("Asistencia(s) guardada(s):")
         all_badges = " ".join([f":gray-badge[:material/calendar_today: {datetime.datetime.strptime(date_str, '%Y-%m-%d').strftime('%m-%d-%Y')}]" for date_str in all_attendance_dates])

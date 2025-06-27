@@ -13,6 +13,8 @@ if not st.session_state.get('logged_in', False):
     st.stop()
 # --- End Login Check ---
 
+if 'attendance_records' not in st.session_state:
+    st.session_state.attendance_records = {}
 # Setup page
 setup_page("Reportes de Asistencia") # Reverted call
 
@@ -26,13 +28,34 @@ SPANISH_DAY_NAMES = {
     "Saturday": "Sábado",
     "Sunday": "Domingo"
 }
-
 # Main UI
 
-# Date selectors for range
+# Initialize with default values
+
+attendance_last_updated = get_last_updated('attendance')
+all_attendance = get_attendance_dates(attendance_last_updated)
+
 today = datetime.date.today()
-# Default start date to the first day of the current month for a more common report view
-default_start_date = today.replace(day=1) 
+all_attendance_dates = sorted(all_attendance)
+min_attendance_date = min(all_attendance_dates) if all_attendance_dates else None
+max_attendance_date = max(all_attendance_dates) if all_attendance_dates else None
+attendance_date_range = f"{min_attendance_date} - {max_attendance_date}" if min_attendance_date and max_attendance_date else "No hay registros de asistencia"    
+if all_attendance_dates:
+    min_attendance_date = min(all_attendance_dates)
+    max_attendance_date = max(all_attendance_dates)
+    # Ensure we have date objects for date operations
+    try:
+        today = datetime.datetime.strptime(max_attendance_date, '%Y-%m-%d').date()
+        min_date = datetime.datetime.strptime(min_attendance_date, '%Y-%m-%d').date()
+        default_start_date = min_date
+    except (ValueError, TypeError):
+        # Fallback to current month start if parsing fails
+        today = datetime.date.today()
+        default_start_date = today.replace(day=1)
+else:
+    today = datetime.date.today()
+    default_start_date = today.replace(day=1)
+
 
 # Format date inputs with MM/DD/YYYY format
 col1, col2 = st.columns(2)
@@ -53,9 +76,6 @@ with col2:
 
 try:
     # Get all attendance dates
-    attendance_last_updated = get_last_updated('attendance')
-    all_attendance = get_attendance_dates(attendance_last_updated)
-    
     if all_attendance:
         st.caption("Asistencia(s) guardada(s):")
         # Display dates in a grid
