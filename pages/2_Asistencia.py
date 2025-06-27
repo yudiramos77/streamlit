@@ -4,7 +4,7 @@ import datetime
 import re
 import io
 import time
-from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated
+from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated, set_last_updated
 from config import setup_page, db
 
 # --- Session Check ---
@@ -579,6 +579,7 @@ if st.session_state.prepared_attendance_dfs:
                     save_success = False
                     st.error(f"Error al guardar la asistencia para {date_str}.")
             if save_success and saved_count > 0:
+                set_last_updated('attendance')
                 st.toast("¡Informes guardados exitosamente!", icon="✅")
                 st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
                 st.balloons()
@@ -587,7 +588,7 @@ if st.session_state.prepared_attendance_dfs:
                 st.session_state.prepared_attendance_dfs = {}
                 st.session_state.processed_files_this_session = set()
                 st.session_state.uploader_key_suffix += 1
-                time.sleep(3)
+                time.sleep(2)
                 st.rerun()
             elif saved_count == 0:
                 st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
@@ -624,6 +625,7 @@ if st.session_state.prepared_attendance_dfs:
                     attendance_data_to_save = edited_df.to_dict('records')
                     if save_attendance(selected_date_obj, attendance_data_to_save):
                         update_attendance_session_state()
+                        set_last_updated('attendance')
                         st.success(f"¡Asistencia guardada exitosamente para {selected_date_str}!")
                         del st.session_state.prepared_attendance_dfs[selected_date_obj]
                         st.rerun()
