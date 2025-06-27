@@ -2,21 +2,38 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 import datetime
-from config import setup_page # Assuming db is implicitly used by load_attendance via utils
+from config import setup_page, db # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import create_filename_date_range,get_student_email, get_student_start_date, get_student_phone, date_format, get_attendance_dates, get_last_updated
+from utils import create_filename_date_range, load_attendance, get_attendance_dates, load_students, get_last_updated, get_student_email, get_student_start_date, get_student_phone, date_format
+from utils import load_all_attendance
 
-# --- Login Check ---
-if not st.session_state.get('logged_in', False):
+
+
+# --- Session Check ---
+if not st.session_state.get("logged_in"):
     st.error("Debe iniciar sesión para acceder a esta página.")
-    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.info("Por favor, regrese a la página de Login y vuelva a iniciar sesión.")
     st.stop()
-# --- End Login Check ---
+# --- End Session Check ---
 
-if 'attendance_records' not in st.session_state:
-    st.session_state.attendance_records = {}
+# Initialize session state
+if 'all_attendance_data' not in st.session_state:
+    st.session_state.all_attendance_data = {}
+
 # Setup page
 setup_page("Reportes de Asistencia") # Reverted call
+
+# Load all attendance data if not already loaded
+if not st.session_state.all_attendance_data and st.session_state.get('user_email'):
+    with st.spinner("Cargando datos de asistencia..."):
+        st.session_state.all_attendance_data = load_all_attendance(db, st.session_state.user_email, attendance_last_updated)
+
+# Add refresh button
+# if st.sidebar.button("🔄 Actualizar Datos de Asistencia"):
+#     with st.sidebar:
+#         with st.spinner("Actualizando datos..."):
+#             st.session_state.all_attendance_data = load_all_attendance(db, st.session_state.user_email)
+#             st.experimental_rerun()
 
 # Manual Spanish day name mapping to avoid locale/encoding issues
 SPANISH_DAY_NAMES = {
@@ -93,6 +110,7 @@ else:
     if st.button("Generar Reporte", key="generate_report_btn", type="primary"): # Translated
         # 1. Load all students
         students_last_updated = get_last_updated('students')
+        attendance_last_updated = get_last_updated('attendance')
         all_students_df, _ = load_students(students_last_updated)
         if all_students_df is None or all_students_df.empty:
             st.error("No se pudo cargar la lista de estudiantes. Por favor, registre estudiantes en la página 'Estudiantes'.") # Translated
@@ -116,8 +134,9 @@ else:
                     current_date_iter += datetime.timedelta(days=1)
                     continue # Skip to next day if it's a weekend
 
-                attendance_last_updated = get_last_updated('attendance')
-                daily_attendance_dict = load_attendance(current_date_iter, attendance_last_updated) # {name: {'status': 'Present', ...}}
+                # Get attendance from pre-loaded data
+                date_key = current_date_iter.strftime('%Y-%m-%d')
+                daily_attendance_dict = st.session_state.all_attendance_data.get(date_key, {})
                 
                 present_today_count = 0
                 if daily_attendance_dict:

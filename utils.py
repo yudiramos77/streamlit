@@ -917,3 +917,16 @@ def strip_email_and_map_course(course_email):
         'HAVC': 'HVAC Technician'
     }
     return course_map.get(course, course)
+
+@st.cache_data(ttl=60*60)  # Cache for 1 hour
+def load_all_attendance(_db, user_email, attendance_last_updated):
+    """Load all attendance records for a user at once"""
+    try:
+        # Replace dots in email for Firebase key
+        user_key = user_email.replace('.', ',')
+        # Get all attendance data for this user
+        all_attendance = _db.child("attendance").child(user_key).get().val() or {}
+        return all_attendance
+    except Exception as e:
+        st.error(f"Error loading attendance data: {e}")
+        return {}
