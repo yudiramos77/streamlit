@@ -23,7 +23,8 @@ else:
                 st.Page("pages/1_Estudiantes_admin.py", title="🎓 Estudiantes"),
                 st.Page("pages/2_Asistencia_admin.py", title="📅 Asistencia"),
                 st.Page("pages/0_Semanas_Descanso.py", title="🌴 Vacaciones"),
-                st.Page("pages/4_Modulos_admin.py", title="📚 Módulos")
+                st.Page("pages/4_Modulos_admin.py", title="📚 Módulos"),
+                st.Page("pages/7_Configuration.py", title="⚙️ Configuración")
             ],
             "Reportes": [
                 st.Page("pages/6_Buscar_estudiantes_Admin.py", title="🔍 Buscar"),
