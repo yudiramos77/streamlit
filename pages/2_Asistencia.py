@@ -292,6 +292,7 @@ def edit_selected_dialog():
             # 4. Rerun the script to apply all changes
             st.rerun()
 
+# Dialog for deleting selected attendance
 @st.dialog("Confirmar eliminación")
 def confirm_delete_selected_dialog():
     if 'to_delete' not in st.session_state or not st.session_state.to_delete:
@@ -316,6 +317,7 @@ def confirm_delete_selected_dialog():
                             if date_key in st.session_state.attendance_data['records']:
                                 del st.session_state.attendance_data['records'][date_key]
                                 st.session_state.attendance_data['dates'].remove(date_key)
+                                set_last_updated('attendance', st.session_state.email)
                         except ValueError:
                             continue
                     
@@ -333,6 +335,7 @@ def confirm_delete_selected_dialog():
             reset_dialog_states()
             st.rerun()
 
+# Dialog for deleting all attendance
 @st.dialog("Confirmar eliminación total")
 def confirm_delete_all_dialog():
     st.write(
@@ -350,6 +353,7 @@ def confirm_delete_all_dialog():
                     st.session_state.uploader_key_suffix += 1
                     st.session_state.attendance_data = {'last_updated': None, 'dates': [], 'records': {}}
                     reset_dialog_states()
+                    set_last_updated('attendance', st.session_state.email)
                     st.success("Todas las asistencias eliminadas exitosamente.")
                     st.rerun()
                 else:

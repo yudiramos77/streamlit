@@ -95,43 +95,118 @@ if selected_course:
     
     # Initialize with default values
     today = datetime.date.today()
+
     all_attendance_dates = sorted(st.session_state.attendance_records.keys())
-    min_attendance_date = min(all_attendance_dates) if all_attendance_dates else None
-    max_attendance_date = max(all_attendance_dates) if all_attendance_dates else None
-    attendance_date_range = f"{min_attendance_date} - {max_attendance_date}" if min_attendance_date and max_attendance_date else "No hay registros de asistencia"    
     if all_attendance_dates:
-        min_attendance_date = min(all_attendance_dates)
-        max_attendance_date = max(all_attendance_dates)
-        # Ensure we have date objects for date operations
         try:
-            today = datetime.datetime.strptime(max_attendance_date, '%Y-%m-%d').date()
-            min_date = datetime.datetime.strptime(min_attendance_date, '%Y-%m-%d').date()
+            today = datetime.datetime.strptime(max(all_attendance_dates), '%Y-%m-%d').date()
+            min_date = datetime.datetime.strptime(min(all_attendance_dates), '%Y-%m-%d').date()
             default_start_date = min_date
+            default_end_date = today
         except (ValueError, TypeError):
-            # Fallback to current month start if parsing fails
             today = datetime.date.today()
             default_start_date = today.replace(day=1)
+            default_end_date = today
     else:
         today = datetime.date.today()
         default_start_date = today.replace(day=1)
+        default_end_date = today
 
+    # --- Step 2: Initialize session state if needed ---
+    if 'report_start_date' not in st.session_state:
+        st.session_state.report_start_date = default_start_date
+    if 'report_end_date' not in st.session_state:
+        st.session_state.report_end_date = default_end_date
+    if 'week_loaded' not in st.session_state:
+        st.session_state.week_loaded = False
+
+    # --- Step 3: Calculate current week range ---
+    # Correct calculation for week_start (Monday)
+    week_start = today - datetime.timedelta(days=today.weekday())
+    # Correct calculation for week_end (Sunday)
+    week_end = week_start + datetime.timedelta(days=6)
+
+    # Ensure start and end dates fall within min/max range
+    start_val = st.session_state.report_start_date
+    end_val = st.session_state.report_end_date
+
+    # Clamp values within the allowed range
+    start_val = max(start_val, default_start_date)
+    start_val = min(start_val, default_end_date)
+
+    end_val = max(end_val, default_start_date)
+    end_val = min(end_val, default_end_date)
+
+    # --- Step 4: Date input controls ---
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fecha de Inicio", value=default_start_date, key="report_start_date", format="MM/DD/YYYY")
+        st.session_state.report_start_date = st.date_input(
+            "Fecha de Inicio",
+            value=start_val,
+            key="report_start_date_input",
+            format="MM/DD/YYYY",
+            min_value=default_start_date,
+            max_value=default_end_date
+        )
+
     with col2:
-        end_date = st.date_input("Fecha de Fin", value=today, key="report_end_date", format="MM/DD/YYYY")
+        st.session_state.report_end_date = st.date_input(
+            "Fecha de Fin",
+            value=end_val,
+            key="report_end_date_input",
+            format="MM/DD/YYYY",
+            min_value=default_start_date,
+            max_value=default_end_date
+        )
 
-    
+    # --- Step 5: Week checkbox logic ---
+    load_current_week = st.checkbox(
+        "Fecha de inicio y fin de la semana actual (o mas cercana)",
+        value=st.session_state.week_loaded,
+        key="load_current_week"
+    )
 
-    if all_attendance_dates:
-        st.caption("Asistencia(s) guardada(s):")
-        all_badges = " ".join([f":gray-badge[:material/calendar_today: {datetime.datetime.strptime(date_str, '%Y-%m-%d').strftime('%m-%d-%Y')}]" for date_str in all_attendance_dates])
-        st.markdown(all_badges)
-    else:
-        st.caption("No hay fechas con asistencia registrada para este curso.")
+    if load_current_week and not st.session_state.week_loaded:
+        st.session_state.report_start_date = week_start
+        st.session_state.report_end_date = week_end
+        st.session_state.week_loaded = True
+        st.rerun()
+    elif not load_current_week and st.session_state.week_loaded:
+        st.session_state.report_start_date = default_start_date
+        st.session_state.report_end_date = default_end_date
+        st.session_state.week_loaded = False
+        st.rerun()
+
+    # --- Step 6: Use final values ---
+    start_date = st.session_state.report_start_date
+    end_date = st.session_state.report_end_date
+
+    try:
+        # Get all attendance dates
+        if st.session_state.attendance_records:
+            st.caption("Registros de Asistencia existentes:")
+            # Display dates in a grid
+            # Correctly generate dates for the current week (Monday to Sunday)
+            current_week_dates = [week_start + datetime.timedelta(days=i) for i in range(7)]
+            
+            # Convert attendance record keys to date objects for comparison
+            attendance_date_objects = {datetime.datetime.strptime(date_str, '%Y-%m-%d').date() for date_str in st.session_state.attendance_records}
+
+            all_badges = " ".join([
+                f":green-badge[:material/calendar_today: {date.strftime('%m-%d-%Y')}]" 
+                if date in current_week_dates else 
+                f":gray-badge[:material/calendar_today: {date.strftime('%m-%d-%Y')}] "
+                for date in sorted(attendance_date_objects)
+            ])
+            st.markdown(all_badges)
+        else:
+            st.caption("No hay fechas con asistencia registrada")
+            
+    except Exception as e:
+        st.error(f"Error al cargar fechas de asistencia: {str(e)}")
 
     if start_date > end_date:
-        st.error("Error: La fecha de inicio no puede ser posterior a la fecha de fin.")
+        st.error("Error: La fecha de inicio no puede ser posterior a la fecha de fin.") # Translated
     else:
         if st.button("Generar Reporte", key="generate_report_btn", type="primary"):
             all_students_df = st.session_state.students_df
@@ -262,5 +337,6 @@ if selected_course:
                     mime='text/csv', key='download_never_attended_csv_btn', type="primary"
                 )
             else:
-                st.success("¡Excelente! Todos los estudiantes registrados asistieron al menos una vez en el rango de fechas seleccionado.")
+
+                st.success("¡Excelente! Todos los estudiantes registrados asistieron **al menos una vez** en el rango de fechas seleccionado.", icon=":material/thumb_up:")
 

@@ -919,14 +919,20 @@ def strip_email_and_map_course(course_email):
     return course_map.get(course, course)
 
 @st.cache_data(ttl=60*60)  # Cache for 1 hour
-def load_all_attendance(_db, user_email, attendance_last_updated):
+def load_all_attendance(user_email, attendance_last_updated):
     """Load all attendance records for a user at once"""
     try:
         # Replace dots in email for Firebase key
         user_key = user_email.replace('.', ',')
+        # st.write(f"DEBUG: Inside load_all_attendance. user_email: {user_email}, user_key: {user_key}")
+        
         # Get all attendance data for this user
-        all_attendance = _db.child("attendance").child(user_key).get().val() or {}
-        return all_attendance
+        all_attendance = db.child("attendance").child(user_key).get(token=st.session_state.user_token).val()
+        # st.write(f"DEBUG: Raw data from Firebase (_db.child('attendance').child('{user_key}').get().val()): {all_attendance}")
+        
+        # Ensure it's a dictionary even if Firebase returns None
+        return all_attendance or {}
     except Exception as e:
         st.error(f"Error loading attendance data: {e}")
+        st.write(f"DEBUG: Error details: {e}") # Log the error details
         return {}
