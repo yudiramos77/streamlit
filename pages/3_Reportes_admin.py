@@ -22,6 +22,8 @@ if 'students_df' not in st.session_state:
     st.session_state.students_df = pd.DataFrame()
 if 'attendance_records' not in st.session_state:
     st.session_state.attendance_records = {}
+if 'course_data_cache' not in st.session_state:
+    st.session_state.course_data_cache = {}
 
 # Manual Spanish day name mapping
 SPANISH_DAY_NAMES = {
@@ -36,35 +38,50 @@ def load_data_into_session(course_email):
     Loads all student and attendance data for a course into the session state.
     Only performs database calls if the selected course has changed.
     """
-    if st.session_state.cached_course_email != course_email:
-        with st.spinner(f"Cargando todos los datos para el curso {course_email}..."):
-            # Load students for the selected course
-            students_last_updated = admin_get_last_updated('students', course_email)
-            students_df, _ = admin_load_students(course_email, students_last_updated)
+    
+    with st.spinner(f"Cargando todos los datos para el curso {course_email}..."):
+        # Load students for the selected course
+        students_last_updated = admin_get_last_updated('students', course_email)
+        students_df, _ = admin_load_students(course_email, students_last_updated)
+    
+
+        # This ensures the DataFrame index (likely the student ID from Firebase) becomes a column named 'id'
+        if students_df is not None and not students_df.empty:
+            students_df = students_df.reset_index().rename(columns={'index': 'id'})
+        else:
+            students_df = pd.DataFrame()
         
+        st.session_state.students_df = students_df
 
-            # This ensures the DataFrame index (likely the student ID from Firebase) becomes a column named 'id'
-            if students_df is not None and not students_df.empty:
-                students_df = students_df.reset_index().rename(columns={'index': 'id'})
-            else:
-                students_df = pd.DataFrame()
-            
-            st.session_state.students_df = students_df
+        # Load ALL attendance records for the course into a dictionary
+        try:
+            attendance_last_updated = admin_get_last_updated('attendance', course_email)
+            # print("\n\nattendance_last_updated", attendance_last_updated)
+            user_email_db_key = course_email.replace('.', ',')
+            all_records = admin_get_attendance(user_email_db_key, attendance_last_updated)
 
-            # Load ALL attendance records for the course into a dictionary
-            try:
-                attendance_last_updated = admin_get_last_updated('attendance', course_email)
-                # print("\n\nattendance_last_updated", attendance_last_updated)
-                user_email_db_key = course_email.replace('.', ',')
-                all_records = admin_get_attendance(user_email_db_key, attendance_last_updated)
+            st.session_state.attendance_records = all_records
+        except Exception as e:
+            st.error(f"No se pudieron cargar los registros de asistencia: {e}")
+            all_records = {}
+            # st.session_state.attendance_records = {}
 
-                st.session_state.attendance_records = all_records
-            except Exception as e:
-                st.error(f"No se pudieron cargar los registros de asistencia: {e}")
-                st.session_state.attendance_records = {}
+        # Store/Update the loaded data for THIS course in the cache
+        # This will overwrite any previous data for this course_email, ensuring it's fresh
+        st.session_state.course_data_cache[course_email] = {
+            'students_df': students_df,
+            'attendance_records': all_records
+        }
+        # st.write(f"Latest data for {course_email} loaded and updated in cache.")
 
-            # Update the cache key to prevent reloading
-            st.session_state.cached_course_email = course_email
+        # Update the cache key to prevent reloading
+        # st.session_state.cached_course_email = course_email
+    
+    # Always make the currently active data available in dedicated session_state keys
+    # This allows downstream code to simply refer to st.session_state.students_df etc.
+    st.session_state.students_df = st.session_state.course_data_cache[course_email]['students_df']
+    st.session_state.attendance_records = st.session_state.course_data_cache[course_email]['attendance_records']
+
 
 # --- Main UI ---
 

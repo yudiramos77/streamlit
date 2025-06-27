@@ -324,6 +324,7 @@ def confirm_delete_selected_dialog():
                             if date_key in st.session_state.attendance_data['records']:
                                 del st.session_state.attendance_data['records'][date_key]
                                 st.session_state.attendance_data['dates'].remove(date_key)
+                            admin_set_last_updated('attendance', selected_course)
                         except ValueError:
                             continue
                     
@@ -357,6 +358,7 @@ def confirm_delete_all_dialog():
                     st.session_state.processed_files_this_session = set()
                     st.session_state.uploader_key_suffix += 1
                     st.session_state.attendance_data = {'last_updated': None, 'dates': [], 'records': {}}
+                    admin_set_last_updated('attendance', selected_course)
                     reset_dialog_states()
                     st.success("Todas las asistencias eliminadas exitosamente.")
                     st.rerun()
