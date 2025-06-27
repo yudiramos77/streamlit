@@ -690,7 +690,7 @@ if st.session_state.prepared_attendance_dfs:
                 st.session_state.prepared_attendance_dfs = {}
                 st.session_state.processed_files_this_session = set()
                 st.session_state.uploader_key_suffix += 1
-                time.sleep(3)
+                time.sleep(2)
                 st.rerun()
             elif saved_count == 0:
                 st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
