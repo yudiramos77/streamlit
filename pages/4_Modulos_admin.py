@@ -122,7 +122,7 @@ def calculate_dates(date_candidate):
 
     if day_of_week != 0: # If it's not Monday
         days_until_monday = (7 - day_of_week) % 7 # % 7 handles Sunday (6) -> 1 day
-        current_date += pd.DateOffset(days=days_until_monday)
+        current_date += pd.Timedelta(days=days_until_monday)
         
     return current_date
 
@@ -130,7 +130,7 @@ def calculate_dates(date_candidate):
 def calculate_weekdays(date_candidate):
     current_date = date_candidate
     while current_date.weekday() >= 5: # Monday is 0, Sunday is 6
-        current_date += pd.DateOffset(days=1)
+        current_date += pd.Timedelta(days=1)
     return current_date
 
 
@@ -267,6 +267,10 @@ try:
                 st.write("reverse_dates", st.session_state.reverse_dates)
                 today = pd.Timestamp.today().normalize()
 
+                # Ensure date columns are pandas Timestamps for calculations
+                edited_df['Fecha Inicio'] = pd.to_datetime(edited_df['Fecha Inicio'])
+                edited_df['Fecha Fin'] = pd.to_datetime(edited_df['Fecha Fin'])
+
                 breaks_data = load_breaks_from_db()
                 parsed_breaks = parse_breaks(breaks_data)
                 breaks = []
@@ -303,7 +307,7 @@ try:
 
                     # last_date_used will now be the *start date* of the module immediately "after" the one we're calculating in reverse
                     # For the first backward pass, it's the pivot module's start date
-                    last_date_used = pivot_start_date
+                    last_date_used = pd.to_datetime(pivot_start_date)
                     # --- 1. Calculate backwards from (current_order - 1) down to 1 ---
                     print(f"\n--- Calculating backwards from Order {current_order - 1} down to 1 ---")
                     # Select modules with order < current_order and sort in descending order
@@ -320,26 +324,40 @@ try:
 
                             # CORRECTED: The new end date is simply the day before the last used start date.
                             # The 'calculate_dates' function must NOT be used here.
-                            new_end_date = last_date_used - pd.DateOffset(days=1)
+                            new_end_date = last_date_used - pd.Timedelta(days=1)
+                            new_start_date = new_end_date - pd.Timedelta(weeks=row['Duración']) + pd.Timedelta(days=1)
+                            cumulative_shift = pd.Timedelta(days=0)
+                            processed_breaks = set() # Prevents double-counting a break
 
-                            # --- MODIFIED: Loop to adjust for breaks ---
                             is_adjusted = True
                             while is_adjusted:
                                 is_adjusted = False
-                                # Calculate the corresponding start date for the module block
-                                new_start_date = new_end_date - pd.DateOffset(weeks=row['Duración']) + pd.DateOffset(days=1)
+                                # The effective start date is the initial calculation minus any shifts we've already applied
+                                effective_start_date = new_start_date - cumulative_shift
+                                
+                                for i, (break_start, break_end) in enumerate(breaks):
+                                    if i in processed_breaks:
+                                        continue
+                                        
+                                    # Check if the EFFECTIVE module block overlaps with this unprocessed break
+                                    # Force all to Timestamps to avoid type errors
+                                    if pd.to_datetime(effective_start_date) <= pd.to_datetime(break_end) and pd.to_datetime(new_end_date) >= pd.to_datetime(break_start):
+                                        # Overlap found.
+                                        print(f"   - Module {row['Nombre Módulo']} overlapped with break {break_start.date()} - {break_end.date()}. Adjusting.")
+                                        
+                                        # The duration of this break needs to be added to our total shift
+                                        break_duration = (break_end - break_start).days + 1
+                                        cumulative_shift += pd.Timedelta(days=break_duration)
+                                        
+                                        # Mark this break as processed so we don't account for it again
+                                        processed_breaks.add(i)
+                                        
+                                        # Rerun the checks, as the newly shifted start date might overlap another, earlier break
+                                        is_adjusted = True
+                                        break # Exit the 'for' loop and restart the 'while' with the updated shift
 
-                                # Check if this entire module block overlaps with any break period
-                                for break_start, break_end in breaks:
-                                    if new_start_date <= break_end and new_end_date >= break_start:
-                                        # Overlap found. Shift the entire module to before the break.
-                                        print(f"    - Module {row['Nombre Módulo']} overlapped with break. Adjusting.")
-                                        new_end_date = break_start - pd.DateOffset(days=1)
-                                        is_adjusted = True  # Rerun the check in case it overlaps another break
-                                        break # Exit the 'for' and restart the 'while' with the new dates
-                            # --- End of break adjustment ---
-
-                            new_start_date = calculate_dates(new_start_date)
+                            # The final start date is the initial start date minus all the accumulated break times
+                            new_start_date = new_start_date - cumulative_shift
 
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
@@ -358,7 +376,7 @@ try:
 
                     # The anchor for this second pass is the original start date of Order 1.
                     # last_date_used for this loop is the start date of Order 1
-                    last_date_used = edited_df[edited_df['Orden'] == 1]['Fecha Inicio'].iloc[0]
+                    last_date_used = pd.to_datetime(edited_df[edited_df['Orden'] == 1]['Fecha Inicio'].iloc[0])
                     modules_to_process_part2 = edited_df[
                         (edited_df['Orden'] > current_order)
                     ].sort_values('Orden', ascending=False)
@@ -373,23 +391,40 @@ try:
                             # The 'if row['Orden'] == current_order: continue' is technically not needed here
                             # due to the filter: (edited_df['Orden'] > current_order)
                             # but it's harmless if left in.
+                            new_end_date = last_date_used - pd.Timedelta(days=1)
+                            new_start_date = new_end_date - pd.Timedelta(weeks=row['Duración']) + pd.Timedelta(days=1)
+                            cumulative_shift = pd.Timedelta(days=0)
+                            processed_breaks = set() # Prevents double-counting a break
 
-                            new_end_date = last_date_used - pd.DateOffset(days=1)
-
-                            # --- ADD THE BREAK ADJUSTMENT LOOP HERE ---
                             is_adjusted = True
                             while is_adjusted:
                                 is_adjusted = False
-                                new_start_date = new_end_date - pd.DateOffset(weeks=row['Duración']) + pd.DateOffset(days=1)
-                                for break_start, break_end in breaks: # 'breaks' needs to be available in this scope
-                                    if new_start_date <= break_end and new_end_date >= break_start:
-                                        print(f"    - Module {row['Nombre Módulo']} overlapped with break in Part 2. Adjusting.")
-                                        new_end_date = break_start - pd.DateOffset(days=1)
+                                # The effective start date is the initial calculation minus any shifts we've already applied
+                                effective_start_date = new_start_date - cumulative_shift
+                                
+                                for i, (break_start, break_end) in enumerate(breaks):
+                                    if i in processed_breaks:
+                                        continue
+                                        
+                                    # Check if the EFFECTIVE module block overlaps with this unprocessed break
+                                    # Force all to Timestamps to avoid type errors
+                                    if pd.to_datetime(effective_start_date) <= pd.to_datetime(break_end) and pd.to_datetime(new_end_date) >= pd.to_datetime(break_start):
+                                        # Overlap found.
+                                        print(f"   - Module {row['Nombre Módulo']} overlapped with break {break_start.date()} - {break_end.date()}. Adjusting.")
+                                        
+                                        # The duration of this break needs to be added to our total shift
+                                        break_duration = (break_end - break_start).days + 1
+                                        cumulative_shift += pd.Timedelta(days=break_duration)
+                                        
+                                        # Mark this break as processed so we don't account for it again
+                                        processed_breaks.add(i)
+                                        
+                                        # Rerun the checks, as the newly shifted start date might overlap another, earlier break
                                         is_adjusted = True
-                                        break # Exit inner for loop, re-evaluate with new_end_date
-                            # --- END OF BREAK ADJUSTMENT LOOP ---
+                                        break # Exit the 'for' loop and restart the 'while' with the updated shift
 
-                            new_start_date = calculate_dates(new_start_date) # Ensure start date is a weekday
+                            # The final start date is the initial start date minus all the accumulated break times
+                            new_start_date = new_start_date - cumulative_shift
 
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
@@ -456,9 +491,9 @@ try:
                             if last_date_used is None:
                                 new_start_date = calculate_dates(row['Fecha Inicio'])
                             else:
-                                new_start_date = calculate_dates(last_date_used + pd.DateOffset(days=1))
+                                new_start_date = calculate_dates(last_date_used + pd.Timedelta(days=1))
 
-                            new_end_date = new_start_date + pd.DateOffset(weeks=row['Duración']) - pd.DateOffset(days=1)
+                            new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
 
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
@@ -477,8 +512,8 @@ try:
                     # 🔁 Recalcula módulos anteriores al módulo actual si están en el pasado
                     for index, row in edited_df[edited_df['Orden'] < current_order].sort_values('Orden').iterrows():
                         if pd.notna(row['Duración']) and last_date_used is not None:
-                            new_start_date = calculate_dates(last_date_used + pd.DateOffset(days=1))
-                            new_end_date = new_start_date + pd.DateOffset(weeks=row['Duración']) - pd.DateOffset(days=1)
+                            new_start_date = calculate_dates(last_date_used + pd.Timedelta(days=1))
+                            new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
 
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
@@ -538,7 +573,7 @@ try:
                         max_order_module = edited_df.loc[edited_df['Orden'] == max_order].squeeze()
                         fecha_fin = max_order_module['Fecha Fin']
                         if pd.notna(fecha_fin):
-                            fecha_fin = fecha_fin + pd.DateOffset(days=1)
+                            fecha_fin = fecha_fin + pd.Timedelta(days=1)
                             # print(f"\n\nFecha fin del módulo con mayor orden que no es el actual (ID: {firebase_key}): {fecha_fin}")
                             # data["Fecha Fin"] = fecha_fin
                         
