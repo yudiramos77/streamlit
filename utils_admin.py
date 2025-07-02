@@ -647,6 +647,7 @@ def sync_firebase_updates(df_old: pd.DataFrame, df_new: pd.DataFrame):
                 print(f"Error updating {key}: {e}")
 
 def update_module_to_db(course_id: str, firebase_key: str, module_data: dict):
+    print("\n\n --- modules uodating to db", course_id, firebase_key, module_data)
     try:
         db.child("modules").child(course_id).child(firebase_key).update(module_data, token=st.session_state.user_token)
         admin_set_last_updated('modules', course_id)
