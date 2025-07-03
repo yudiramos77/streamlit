@@ -267,192 +267,129 @@ try:
             if st.session_state.config_calculate_dates_backwards:
                 st.warning("Tenga en cuenta que el cálculo de las fechas se va a realizar hacia atrás. Si desea cambiar es método de cálculo, por favor, desactive esta opción en la sección de configuración.", icon=":material/warning:")
                 if st.button("Recalcular las fechas hacia atrás", key="recalcular_fechas"):
-                    # st.write("reverse_dates", st.session_state.reverse_dates)
                     today = pd.Timestamp.today().normalize()
 
-                    # Ensure date columns are pandas Timestamps for calculations
+                    # Asegurar que las columnas de fecha son Timestamps de pandas
                     edited_df['Fecha Inicio'] = pd.to_datetime(edited_df['Fecha Inicio'])
                     edited_df['Fecha Fin'] = pd.to_datetime(edited_df['Fecha Fin'])
                     
-                    # Load breaks from database
-                    # TODO: cache this call
+                    # Cargar y parsear los breaks/vacaciones
                     breaks_data = load_breaks_from_db()
                     parsed_breaks = parse_breaks(breaks_data)
                     breaks = []
-
                     for b_start_date, b_end_date in parsed_breaks:
                         breaks.append((pd.Timestamp(b_start_date), pd.Timestamp(b_end_date)))
-                    # Encuentra el módulo que contiene la fecha de hoy
+                    # Ordenar las vacaciones de más reciente a más antigua, es clave para la lógica de retroceso
+                    breaks.sort(key=lambda x: x[0], reverse=True)
+
+                    # Encontrar el módulo actual
                     module_with_today = edited_df[
                         (edited_df['Fecha Inicio'].notna()) &
                         (edited_df['Fecha Fin'].notna()) &
                         (edited_df['Fecha Inicio'] <= today) &
                         (edited_df['Fecha Fin'] >= today)
                     ]
-    
+
                     if not module_with_today.empty:
                         current_index = module_with_today.index[0]
                         current_order = edited_df.loc[current_index, 'Orden']
-                        # print(f"Hoy cae en el módulo con orden {current_order}")
-
+                        
                         changed_rows = {}
-                        last_date_used = None
-
-                        # 👈 Recalcula fechas hacia atrás desde el módulo actual
-                        # Identify the fixed current module's end date (our first pivot for backward calculation)
+                        
                         pivot_module_row = edited_df[edited_df['Orden'] == current_order].iloc[0]
-                        pivot_start_date = pivot_module_row['Fecha Inicio']
-                        pivot_end_date = pivot_module_row['Fecha Fin']
+                        pivot_start_date = pd.to_datetime(pivot_module_row['Fecha Inicio'])
                         max_order = edited_df['Orden'].max()
 
-                        # st.write("pivot_start_date", pivot_start_date)
-                        # st.write("pivot_end_date", pivot_end_date)
-                        # st.write("max_order", max_order)   
+                        # Función auxiliar para no repetir código. Esta es la nueva lógica centralizada.
+                        def calculate_module_dates_stretch(row, anchor_date, all_breaks):
+                            """
+                            Calcula las fechas de un módulo hacia atrás, "estirando" su duración
+                            si se superpone con vacaciones. El módulo se "pausa" durante las vacaciones.
+                            """
+                            # La fecha final tentativa es el día anterior a la fecha de anclaje.
+                            # Esta fecha final NO cambiará, a menos que ella misma caiga en vacaciones.
+                            end_date = anchor_date - pd.Timedelta(days=1)
+                            
+                            # Asegurarnos de que la propia end_date no caiga en unas vacaciones.
+                            # Si lo hace, la movemos al día antes de que esas vacaciones comiencen.
+                            for break_start, break_end in all_breaks:
+                                if break_start <= end_date <= break_end:
+                                    end_date = break_start - pd.Timedelta(days=1)
+                                    break # Solo debería haber un conflicto posible aquí
 
-                        # last_date_used will now be the *start date* of the module immediately "after" the one we're calculating in reverse
-                        # For the first backward pass, it's the pivot module's start date
-                        last_date_used = pd.to_datetime(pivot_start_date)
-                        # --- 1. Calculate backwards from (current_order - 1) down to 1 ---
-                        print(f"\n--- Calculating backwards from Order {current_order - 1} down to 1 ---")
-                        # Select modules with order < current_order and sort in descending order
+                            # Duración del trabajo del módulo en días
+                            work_duration_days = row['Duración'] * 7
+                            
+                            # Calculamos la fecha de inicio inicial, solo con la duración del trabajo.
+                            current_start_date = end_date - pd.Timedelta(days=work_duration_days - 1)
+                            
+                            # Bucle iterativo para ajustar la fecha de inicio hasta que se estabilice
+                            while True:
+                                total_overlap_days = 0
+                                # Revisa si el intervalo [current_start_date, end_date] se solapa con alguna vacación
+                                for break_start, break_end in all_breaks:
+                                    # Condición de solapamiento: (Inicio1 <= Fin2) y (Fin1 >= Inicio2)
+                                    if current_start_date <= break_end and end_date >= break_start:
+                                        # Calcular la intersección (los días exactos de solapamiento)
+                                        overlap_start = max(current_start_date, break_start)
+                                        overlap_end = min(end_date, break_end)
+                                        
+                                        # Sumar la cantidad de días de este solapamiento
+                                        overlap_duration = (overlap_end - overlap_start).days + 1
+                                        total_overlap_days += overlap_duration
+                                
+                                # Calculamos la fecha de inicio requerida, añadiendo los días de vacaciones a la duración
+                                required_start_date = end_date - pd.Timedelta(days=work_duration_days + total_overlap_days - 1)
+                                
+                                # Si la fecha de inicio ya no cambia, hemos terminado y las fechas son correctas.
+                                if required_start_date == current_start_date:
+                                    break # Sal del bucle 'while'
+                                else:
+                                    # Si cambió, actualizamos la fecha de inicio y volvemos a iterar,
+                                    # porque la nueva fecha podría solaparse con otras vacaciones anteriores.
+                                    current_start_date = required_start_date
+                                    
+                            return current_start_date, end_date
+
+
+
+                        # --- 1. Calcular hacia atrás desde (current_order - 1) hasta 1 ---
+                        last_date_used = pivot_start_date
                         modules_to_process_part1 = edited_df[
-                            (edited_df['Orden'] < current_order) & (edited_df['Orden'] >= 1) # Ensure we don't go below 1
+                            (edited_df['Orden'] < current_order) & (edited_df['Orden'] >= 1)
                         ].sort_values('Orden', ascending=False)
 
-                        # print("\n\nmodules_to_process_part1", modules_to_process_part1)
                         for index, row in modules_to_process_part1.iterrows():
-                            # print("\n\nrow", row)
                             if pd.notna(row['Duración']):
-                                # If the order is 1, its date is fixed, so skip calculation for it in this loop.
-                                if pd.notna(row['Duración']):
-                                    if row['Orden'] == 1:
-                                        continue
-
-                                # CORRECTED: The new end date is simply the day before the last used start date.
-                                # The 'calculate_dates' function must NOT be used here.
-                                new_end_date = last_date_used - pd.Timedelta(days=1)
-                                new_start_date = new_end_date - pd.Timedelta(weeks=row['Duración']) + pd.Timedelta(days=1)
-                                cumulative_shift = pd.Timedelta(days=0)
-                                processed_breaks = set() # Prevents double-counting a break
-
-                                # print("\n\nnew_end_date", new_end_date)
-                                # print("\n\nnew_start_date", new_start_date)
-                                # print("\n\ncumulative_shift", cumulative_shift)
-                                # print("\n\nprocessed_breaks", processed_breaks)
-                                # print("\n\nis_adjusted", is_adjusted)
-                                is_adjusted = True
-                                while is_adjusted:
-                                    is_adjusted = False
-                                    # The effective start date is the initial calculation minus any shifts we've already applied
-                                    effective_start_date = new_start_date - cumulative_shift
-                                    
-                                    for i, (break_start, break_end) in enumerate(breaks):
-                                        if i in processed_breaks:
-                                            continue
-                                            
-                                        # Check if the EFFECTIVE module block overlaps with this unprocessed break
-                                        # Force all to Timestamps to avoid type errors
-                                        if pd.to_datetime(effective_start_date) <= pd.to_datetime(break_end) and pd.to_datetime(new_end_date) >= pd.to_datetime(break_start):
-                                            # Overlap found.
-                                            print(f"   - Module {row['Nombre Módulo']} overlapped with break {break_start.date()} - {break_end.date()}. Adjusting.")
-                                            
-                                            # The duration of this break needs to be added to our total shift
-                                            break_duration = (break_end - break_start).days + 1
-                                            cumulative_shift += pd.Timedelta(days=break_duration)
-                                            
-                                            # Mark this break as processed so we don't account for it again
-                                            processed_breaks.add(i)
-                                            
-                                            # Rerun the checks, as the newly shifted start date might overlap another, earlier break
-                                            is_adjusted = True
-                                            break # Exit the 'for' loop and restart the 'while' with the updated shift
-
-                                # The final start date is the initial start date minus all the accumulated break times
-                                new_start_date = new_start_date - cumulative_shift
+                                if row['Orden'] == 1: # La fecha del módulo 1 es fija en esta lógica
+                                    continue
+                                
+                                new_start_date, new_end_date = calculate_module_dates_stretch(row, last_date_used, breaks)
 
                                 old_start = edited_df.loc[index, 'Fecha Inicio']
                                 old_end = edited_df.loc[index, 'Fecha Fin']
 
-                                if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
+                                if new_start_date != old_start or new_end_date != old_end:
                                     edited_df.loc[index, 'Fecha Inicio'] = new_start_date
                                     edited_df.loc[index, 'Fecha Fin'] = new_end_date
-                                    # (Firebase update logic would go here)
-                                    # print(f"  Updated Module Order {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
+                                    # Aquí iría tu lógica para guardar en Firebase/changed_rows
 
                                 last_date_used = new_start_date
-                                # print("\n\nlast_date_used", last_date_used)
-                                # print("\n\nnew_start_date", new_start_date)
-                                # print("\n\nnew_end_date", new_end_date)
-                                # print("\n\ncumulative_shift", cumulative_shift)
-                                # print("\n\nprocessed_breaks", processed_breaks)
-                                # print("\n\nis_adjusted", is_adjusted)
-                                # print("\n\nold_start", old_start)
-                                # print("\n\nold_end", old_end)
-                                
-                        
-                        # --- 2. Wrap around and calculate backwards from max_order down to 2 ---
-                        # (assuming Order 1 is already handled by being fixed)
-                        print(f"\n--- Calculating backwards from Order {max_order} down to {current_order + 1} (after wrap-around) ---")
 
-                        # The anchor for this second pass is the original start date of Order 1.
-                        # last_date_used for this loop is the start date of Order 1
+                        # --- 2. Envolver y calcular hacia atrás desde max_order hasta (current_order + 1) ---
                         last_date_used = pd.to_datetime(edited_df[edited_df['Orden'] == 1]['Fecha Inicio'].iloc[0])
                         modules_to_process_part2 = edited_df[
                             (edited_df['Orden'] > current_order)
                         ].sort_values('Orden', ascending=False)
-
-                        # Filter out the highest_order module if it's the same as current_order
-                        if current_order == max_order:
-                            modules_to_process_part2 = modules_to_process_part2[modules_to_process_part2['Orden'] < max_order]
-
-
+                        
                         for index, row in modules_to_process_part2.iterrows():
                             if pd.notna(row['Duración']):
-                                # The 'if row['Orden'] == current_order: continue' is technically not needed here
-                                # due to the filter: (edited_df['Orden'] > current_order)
-                                # but it's harmless if left in.
-                                new_end_date = last_date_used - pd.Timedelta(days=1)
-                                new_start_date = new_end_date - pd.Timedelta(weeks=row['Duración']) + pd.Timedelta(days=1)
-                                cumulative_shift = pd.Timedelta(days=0)
-                                processed_breaks = set() # Prevents double-counting a break
-
-                                is_adjusted = True
-                                while is_adjusted:
-                                    is_adjusted = False
-                                    # The effective start date is the initial calculation minus any shifts we've already applied
-                                    effective_start_date = new_start_date - cumulative_shift
-                                    
-                                    for i, (break_start, break_end) in enumerate(breaks):
-                                        if i in processed_breaks:
-                                            continue
-                                            
-                                        # Check if the EFFECTIVE module block overlaps with this unprocessed break
-                                        # Force all to Timestamps to avoid type errors
-                                        if pd.to_datetime(effective_start_date) <= pd.to_datetime(break_end) and pd.to_datetime(new_end_date) >= pd.to_datetime(break_start):
-                                            # Overlap found.
-                                            print(f"   - Module {row['Nombre Módulo']} overlapped with break {break_start.date()} - {break_end.date()}. Adjusting.")
-                                            
-                                            # The duration of this break needs to be added to our total shift
-                                            break_duration = (break_end - break_start).days + 1
-                                            cumulative_shift += pd.Timedelta(days=break_duration)
-                                            
-                                            # Mark this break as processed so we don't account for it again
-                                            processed_breaks.add(i)
-                                            
-                                            # Rerun the checks, as the newly shifted start date might overlap another, earlier break
-                                            is_adjusted = True
-                                            break # Exit the 'for' loop and restart the 'while' with the updated shift
-
-                                # The final start date is the initial start date minus all the accumulated break times
-                                
-                                # print(f"\n\ncumulative_shift: {cumulative_shift}")
-                                new_start_date = new_start_date - cumulative_shift
-                                new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
+                                new_start_date, new_end_date = calculate_module_dates_stretch(row, last_date_used, breaks)
 
                                 old_start = edited_df.loc[index, 'Fecha Inicio']
                                 old_end = edited_df.loc[index, 'Fecha Fin']
 
-                                if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
+                                if new_start_date != old_start or new_end_date != old_end:
                                     edited_df.loc[index, 'Fecha Inicio'] = new_start_date
                                     edited_df.loc[index, 'Fecha Fin'] = new_end_date
                                     firebase_key = edited_df.loc[index, 'firebase_key']
@@ -460,21 +397,11 @@ try:
                                         'Fecha Inicio': new_start_date.isoformat(),
                                         'Fecha Fin': new_end_date.isoformat()
                                     }
-                                # print(f"\n\n    Updated Module Order start date {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
-                                # print(f"    Updated Module Order end date {row['Orden']}: {row['Nombre Módulo']} from {old_end.strftime('%Y-%m-%d')} to {new_end_date.strftime('%Y-%m-%d')}")
                                 last_date_used = new_start_date
-
-
-                        print("\n--- Final DataFrame after all calculations ---")
-                        print(edited_df)
-                        print("\n--- Changed Rows for Firebase Update ---")
-                        print(changed_rows)
-
-                        # Guarda cambios
+                        
+                        # Guarda los cambios en la sesión de Streamlit y vuelve a ejecutar
                         st.session_state.modules_df_by_course[modules_selected_course] = edited_df
                         st.session_state.modules_date_updates = changed_rows
-
-                        print(f"\n\nFinal result:\n{edited_df}")
                         st.rerun()
             
                     else:
@@ -497,29 +424,94 @@ try:
                         (edited_df['Fecha Fin'] >= today)
                     ]
 
-    
+                    def calculate_module_dates_forward_stretch(row, anchor_date, all_breaks):
+                        """
+                        Calcula las fechas de un módulo hacia adelante, "estirando" su duración
+                        si se superpone con vacaciones. El módulo se "pausa" durante las vacaciones.
+                        
+                        Args:
+                            row (pd.Series): La fila del módulo con su 'Duración'.
+                            anchor_date (pd.Timestamp): La fecha de finalización del módulo anterior.
+                            all_breaks (list): Una lista de tuplas con fechas de inicio y fin de las vacaciones.
+                            
+                        Returns:
+                            tuple: (start_date, end_date) para el módulo calculado.
+                        """
+                        # La fecha de inicio tentativa es el día siguiente a la fecha de anclaje.
+                        start_date = anchor_date + pd.Timedelta(days=1)
+                        
+                        # Bucle para asegurar que la propia start_date no caiga en unas vacaciones.
+                        # Si lo hace, la movemos al día después de que terminen esas vacaciones.
+                        date_adjusted = True
+                        while date_adjusted:
+                            date_adjusted = False
+                            for break_start, break_end in all_breaks:
+                                if break_start <= start_date <= break_end:
+                                    start_date = break_end + pd.Timedelta(days=1)
+                                    date_adjusted = True # Re-evaluar por si cae en otro break consecutivo
+                                    break
+
+                        # Duración del trabajo del módulo en días
+                        work_duration_days = row['Duración'] * 7
+                        
+                        # Calculamos la fecha de finalización inicial, solo con la duración del trabajo.
+                        current_end_date = start_date + pd.Timedelta(days=work_duration_days - 1)
+                        
+                        # Bucle iterativo para ajustar la fecha de finalización hasta que se estabilice
+                        while True:
+                            total_overlap_days = 0
+                            # Revisa si el intervalo [start_date, current_end_date] se solapa con alguna vacación
+                            for break_start, break_end in all_breaks:
+                                if start_date <= break_end and current_end_date >= break_start:
+                                    # Calcular la intersección (los días exactos de solapamiento)
+                                    overlap_start = max(start_date, break_start)
+                                    overlap_end = min(current_end_date, break_end)
+                                    
+                                    # Sumar la cantidad de días de este solapamiento
+                                    overlap_duration = (overlap_end - overlap_start).days + 1
+                                    total_overlap_days += overlap_duration
+                            
+                            # Calculamos la fecha de finalización requerida, añadiendo los días de vacaciones a la duración
+                            required_end_date = start_date + pd.Timedelta(days=work_duration_days + total_overlap_days - 1)
+                            
+                            # Si la fecha de finalización ya no cambia, hemos terminado.
+                            if required_end_date == current_end_date:
+                                break
+                            else:
+                                # Si cambió, actualizamos la fecha de finalización y volvemos a iterar
+                                current_end_date = required_end_date
+                                
+                        return start_date, current_end_date
 
                     if not module_with_today.empty:
                         current_index = module_with_today.index[0]
                         current_order = edited_df.loc[current_index, 'Orden']
-                        # print(f"Hoy cae en el módulo con orden {current_order}")
-
+                        
                         changed_rows = {}
-                        last_date_used = None
+                        
+                        # El anclaje inicial es la fecha de inicio del módulo actual, menos un día.
+                        # De esta forma, el primer módulo que se calcula es el actual, partiendo de su propia fecha de inicio.
+                        last_date_used = edited_df.loc[current_index, 'Fecha Inicio'] - pd.Timedelta(days=1)
 
-                    # 👉 Recalcula fechas hacia adelante desde el módulo actual
-                        for index, row in edited_df[edited_df['Orden'] >= current_order].sort_values('Orden').iterrows():
+                        # Ordenamos todos los módulos que necesitan ser recalculados en una sola secuencia
+                        # Primero los que van desde el actual hasta el final, luego los que estaban antes (wrap-around)
+                        modules_to_recalculate_forward = edited_df[edited_df['Orden'] >= current_order].sort_values('Orden')
+                        modules_to_recalculate_wrap = edited_df[edited_df['Orden'] < current_order].sort_values('Orden')
+                        
+                        # Concatenamos para tener una única lista de cálculo en el orden correcto
+                        recalculation_order_df = pd.concat([modules_to_recalculate_forward, modules_to_recalculate_wrap])
+
+                        # 👉 Bucle único para recalcular todas las fechas hacia adelante en la secuencia correcta
+                        for index, row in recalculation_order_df.iterrows():
                             if pd.notna(row['Duración']):
-                                if last_date_used is None:
-                                    new_start_date = calculate_dates(row['Fecha Inicio'])
-                                else:
-                                    new_start_date = calculate_dates(last_date_used + pd.Timedelta(days=1))
-
-                                new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
+                                
+                                # Usamos la nueva función para obtener las fechas correctas, que ya consideran vacaciones
+                                new_start_date, new_end_date = calculate_module_dates_forward_stretch(row, last_date_used, breaks)
 
                                 old_start = edited_df.loc[index, 'Fecha Inicio']
                                 old_end = edited_df.loc[index, 'Fecha Fin']
 
+                                # Comprobar si las fechas han cambiado para guardarlas
                                 if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
                                     edited_df.loc[index, 'Fecha Inicio'] = new_start_date
                                     edited_df.loc[index, 'Fecha Fin'] = new_end_date
@@ -529,26 +521,7 @@ try:
                                         'Fecha Fin': new_end_date.isoformat()
                                     }
 
-                                last_date_used = new_end_date
-
-                        # 🔁 Recalcula módulos anteriores al módulo actual si están en el pasado
-                        for index, row in edited_df[edited_df['Orden'] < current_order].sort_values('Orden').iterrows():
-                            if pd.notna(row['Duración']) and last_date_used is not None:
-                                new_start_date = calculate_dates(last_date_used + pd.Timedelta(days=1))
-                                new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
-
-                                old_start = edited_df.loc[index, 'Fecha Inicio']
-                                old_end = edited_df.loc[index, 'Fecha Fin']
-
-                                if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
-                                    edited_df.loc[index, 'Fecha Inicio'] = new_start_date
-                                    edited_df.loc[index, 'Fecha Fin'] = new_end_date
-                                    firebase_key = edited_df.loc[index, 'firebase_key']
-                                    changed_rows.setdefault(modules_selected_course, {})[firebase_key] = {
-                                        'Fecha Inicio': new_start_date.isoformat(),
-                                        'Fecha Fin': new_end_date.isoformat()
-                                    }
-
+                                # La fecha final de este módulo es el anclaje para el siguiente
                                 last_date_used = new_end_date
 
                         # Guarda cambios
@@ -558,7 +531,7 @@ try:
                         print(f"\n\nFinal result:\n{edited_df}")
                         st.rerun()
                     else:
-                        st.warning("No se encontró ningún módulo correspondiente al día actual.")   
+                        st.warning("No se encontró ningún módulo correspondiente al día actual.")
 
             # end date calculation
             if all(pd.notna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin', 'Duración', 'Orden']):
@@ -573,6 +546,7 @@ try:
                     
                     # Renombrar columnas visibles a nombres de base de datos
                     edited_df_for_save = edited_df.rename(columns=reverse_display_names)
+                    print("\n\n 📝 Edited df for save:\n", edited_df_for_save)
                     old_df = st.session_state.modules_df_by_course[modules_selected_course]
                     new_df = edited_df_for_save.copy()
 
@@ -601,7 +575,7 @@ try:
                         if firebase_key:
                             new_df.loc[row.name, "firebase_key"] = firebase_key
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()
-                            st.success(f"Módulo nuevo guardado con ID: {firebase_key}")
+                            st.toast("✅ Módulo nuevo guardado.")
                             st.session_state.editor_key += 1
                             time.sleep(1)
                             st.rerun()
@@ -611,14 +585,17 @@ try:
                     for key in common_keys:
                         old_row = old_df[old_df["firebase_key"] == key].squeeze()
                         new_row = new_df[new_df["firebase_key"] == key].squeeze()
-
+                        print("\n\n 📝 Old row:", old_row)
+                        print("\n\n 📝 New row:", new_row)
                         # Comparamos los valores excepto firebase_key
                         if not old_row.drop(labels=["firebase_key"]).equals(new_row.drop(labels=["firebase_key"])):
                             clean = row_to_clean_dict(new_row)
                             data = transform_module_input(clean)
+                            print("\n\n 📝 Data to update:", data)
                             update_module_to_db(modules_selected_course, key, data)
 
-                            st.success(f"Modulo con ID {key} actualizado.")
+                            # st.success(f"Modulo con ID {key} actualizado.")
+                            st.toast("✅ Modulo actualizado.")
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()
                             st.session_state.editor_key += 1
                             time.sleep(1)
@@ -632,12 +609,13 @@ try:
                             # print(f"Nuevo DataFrame: {new_df[new_df["firebase_key"] != key]}")   
                             new_df = new_df[new_df["firebase_key"] != key]
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()                     
-                            st.success(f"Módulo con ID {key} eliminado de la base de datos.")
+                            st.toast("✅ Módulo eliminado.")
                             st.session_state.editor_key += 1
                             time.sleep(1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error al eliminar el módulo con ID {key}: {str(e)}")
+                            st.stop()
                     
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message

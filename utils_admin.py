@@ -328,7 +328,7 @@ def admin_get_available_modules(user_email: str) -> list:
 
         module_options = []
         today = datetime.datetime.today()
-        cutoff_date = today - datetime.timedelta(days=180)
+        cutoff_date = today - datetime.timedelta(days=300)
 
         # Process each module
         for module_id, module_data in modules_ref.val().items():
@@ -559,12 +559,15 @@ def calculate_end_date(start_date, num_weeks, breaks):
             total_break_days += (overlap_end - overlap_start).days + 1  
 
     end_date += datetime.timedelta(days=total_break_days)
+    # End date should be a sunday
+    end_date -= datetime.timedelta(days=1)
     print("\n\nend_date", end_date)
     return end_date
 
 def row_to_clean_dict(row: pd.Series) -> dict:
     """
     • Converts NaN / None / pd.NA to "" (empty text)  
+    * Converts np.int64 to int
     • Converts pandas.Timestamp → python datetime.datetime  
     • Leaves every other value unchanged
     """
@@ -574,6 +577,8 @@ def row_to_clean_dict(row: pd.Series) -> dict:
             clean[k] = ""
         elif isinstance(v, pd.Timestamp):
             clean[k] = v.strftime("%Y-%m-%d")  # <- convert to string
+        elif isinstance(v, np.int64):
+            clean[k] = int(v)
         else:
             clean[k] = v
     return clean
