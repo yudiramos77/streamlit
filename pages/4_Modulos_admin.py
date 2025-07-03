@@ -573,6 +573,7 @@ try:
                     
                     # Renombrar columnas visibles a nombres de base de datos
                     edited_df_for_save = edited_df.rename(columns=reverse_display_names)
+                    print("\n\n 📝 Edited df for save:\n", edited_df_for_save)
                     old_df = st.session_state.modules_df_by_course[modules_selected_course]
                     new_df = edited_df_for_save.copy()
 
@@ -601,7 +602,7 @@ try:
                         if firebase_key:
                             new_df.loc[row.name, "firebase_key"] = firebase_key
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()
-                            st.success(f"Módulo nuevo guardado con ID: {firebase_key}")
+                            st.toast("✅ Módulo nuevo guardado.")
                             st.session_state.editor_key += 1
                             time.sleep(1)
                             st.rerun()
@@ -611,14 +612,17 @@ try:
                     for key in common_keys:
                         old_row = old_df[old_df["firebase_key"] == key].squeeze()
                         new_row = new_df[new_df["firebase_key"] == key].squeeze()
-
+                        print("\n\n 📝 Old row:", old_row)
+                        print("\n\n 📝 New row:", new_row)
                         # Comparamos los valores excepto firebase_key
                         if not old_row.drop(labels=["firebase_key"]).equals(new_row.drop(labels=["firebase_key"])):
                             clean = row_to_clean_dict(new_row)
                             data = transform_module_input(clean)
+                            print("\n\n 📝 Data to update:", data)
                             update_module_to_db(modules_selected_course, key, data)
 
-                            st.success(f"Modulo con ID {key} actualizado.")
+                            # st.success(f"Modulo con ID {key} actualizado.")
+                            st.toast("✅ Modulo actualizado.")
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()
                             st.session_state.editor_key += 1
                             time.sleep(1)
@@ -632,12 +636,13 @@ try:
                             # print(f"Nuevo DataFrame: {new_df[new_df["firebase_key"] != key]}")   
                             new_df = new_df[new_df["firebase_key"] != key]
                             st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()                     
-                            st.success(f"Módulo con ID {key} eliminado de la base de datos.")
+                            st.toast("✅ Módulo eliminado.")
                             st.session_state.editor_key += 1
                             time.sleep(1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error al eliminar el módulo con ID {key}: {str(e)}")
+                            st.stop()
                     
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message

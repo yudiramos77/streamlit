@@ -565,6 +565,7 @@ def calculate_end_date(start_date, num_weeks, breaks):
 def row_to_clean_dict(row: pd.Series) -> dict:
     """
     • Converts NaN / None / pd.NA to "" (empty text)  
+    * Converts np.int64 to int
     • Converts pandas.Timestamp → python datetime.datetime  
     • Leaves every other value unchanged
     """
@@ -574,6 +575,8 @@ def row_to_clean_dict(row: pd.Series) -> dict:
             clean[k] = ""
         elif isinstance(v, pd.Timestamp):
             clean[k] = v.strftime("%Y-%m-%d")  # <- convert to string
+        elif isinstance(v, np.int64):
+            clean[k] = int(v)
         else:
             clean[k] = v
     return clean
