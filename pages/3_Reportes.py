@@ -4,8 +4,7 @@ import urllib.parse
 import datetime
 from config import setup_page, db # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import create_filename_date_range, load_attendance, get_attendance_dates, load_students, get_last_updated, get_student_email, get_student_start_date, get_student_phone, date_format
-from utils import load_all_attendance
+from utils import create_filename_date_range, load_attendance, get_attendance_dates, load_students, get_last_updated, get_student_email, get_student_start_date, get_student_phone, date_format, load_all_attendance
 
 
 # --- Session Check ---
