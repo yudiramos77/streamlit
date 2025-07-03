@@ -1000,6 +1000,11 @@ def admin_load_attendance(course_email: str, date: datetime.date, attendance_las
         st.error(f"Error loading attendance for {date_str}: {str(e)}")
         return {}
 
+def store_value(key):
+    st.session_state[key] = st.session_state["_"+key]
+def load_value(key):
+    st.session_state["_"+key] = st.session_state[key]
+    
 
 # students
 #     cba2@iti,edu

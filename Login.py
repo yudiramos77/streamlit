@@ -14,6 +14,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.token_expires_at = None # To store the token's expiration time
     st.session_state.admin = False
 
+    st.session_state.config_calculate_dates_backwards = False
+
 def login_user(email, password):
     try:
         user = auth.sign_in_with_email_and_password(email, password)

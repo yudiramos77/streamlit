@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from config import setup_page
+from utils_admin import store_value, load_value
 
 # Check for login status and valid session
 if not st.session_state.get("logged_in") or "token_expires_at" not in st.session_state:
@@ -33,11 +34,9 @@ with tab1:
     
     # The checkbox - uses the session state initialized in Login.py
     # st.input
-    reverse_dates_value = st.selectbox(
-        "Calcular fechas de módulos hacia el pasado",
-        options=["No", "Sí"],
-        key="reverse_dates_value"
-    )
+    load_value("config_calculate_dates_backwards")
+    st.checkbox("Calcular fechas de módulos hacia el pasado", key="_config_calculate_dates_backwards", on_change=store_value, args=["config_calculate_dates_backwards"])
+
 
     
 
@@ -52,4 +51,4 @@ with tab2:
 # else:
 #     st.info("Modo básico activado.")
 # You can add this line for debugging to see the state in your terminal
-st.write(f"Current state of reverse_dates: {st.session_state.get('reverse_dates')}")
+# st.write(f"Current state of reverse_dates: {st.session_state.config_calculate_dates_backwards}")
