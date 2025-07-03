@@ -51,7 +51,7 @@ if date_updates:
                 print("\n\nmodule_dataddd", module_data)
                 
                 # print("Fecha inicio:", datetime.datetime.fromisoformat(module_data['Fecha Inicio']).strftime('%Y-%m-%d'))
-              
+
                 update_module_to_db(course_email, firebase_key, {
                     'fecha_inicio_1': datetime.datetime.fromisoformat(module_data['Fecha Inicio']).strftime('%Y-%m-%d'),
                     'fecha_fin_1': datetime.datetime.fromisoformat(module_data['Fecha Fin']).strftime('%Y-%m-%d')
@@ -270,10 +270,13 @@ try:
                 # Ensure date columns are pandas Timestamps for calculations
                 edited_df['Fecha Inicio'] = pd.to_datetime(edited_df['Fecha Inicio'])
                 edited_df['Fecha Fin'] = pd.to_datetime(edited_df['Fecha Fin'])
-
+                
+                # Load breaks from database
+                # TODO: cache this call
                 breaks_data = load_breaks_from_db()
                 parsed_breaks = parse_breaks(breaks_data)
                 breaks = []
+
                 for b_start_date, b_end_date in parsed_breaks:
                     breaks.append((pd.Timestamp(b_start_date), pd.Timestamp(b_end_date)))
                 # Encuentra el módulo que contiene la fecha de hoy
@@ -283,9 +286,7 @@ try:
                     (edited_df['Fecha Inicio'] <= today) &
                     (edited_df['Fecha Fin'] >= today)
                 ]
-
   
-
                 if not module_with_today.empty:
                     current_index = module_with_today.index[0]
                     current_order = edited_df.loc[current_index, 'Orden']
@@ -315,7 +316,9 @@ try:
                         (edited_df['Orden'] < current_order) & (edited_df['Orden'] >= 1) # Ensure we don't go below 1
                     ].sort_values('Orden', ascending=False)
 
+                     # print("\n\nmodules_to_process_part1", modules_to_process_part1)
                     for index, row in modules_to_process_part1.iterrows():
+                        # print("\n\nrow", row)
                         if pd.notna(row['Duración']):
                             # If the order is 1, its date is fixed, so skip calculation for it in this loop.
                             if pd.notna(row['Duración']):
@@ -329,6 +332,11 @@ try:
                             cumulative_shift = pd.Timedelta(days=0)
                             processed_breaks = set() # Prevents double-counting a break
 
+                            # print("\n\nnew_end_date", new_end_date)
+                            # print("\n\nnew_start_date", new_start_date)
+                            # print("\n\ncumulative_shift", cumulative_shift)
+                            # print("\n\nprocessed_breaks", processed_breaks)
+                            # print("\n\nis_adjusted", is_adjusted)
                             is_adjusted = True
                             while is_adjusted:
                                 is_adjusted = False
@@ -366,9 +374,18 @@ try:
                                 edited_df.loc[index, 'Fecha Inicio'] = new_start_date
                                 edited_df.loc[index, 'Fecha Fin'] = new_end_date
                                 # (Firebase update logic would go here)
-                                print(f"  Updated Module Order {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
+                                # print(f"  Updated Module Order {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
 
                             last_date_used = new_start_date
+                            # print("\n\nlast_date_used", last_date_used)
+                            # print("\n\nnew_start_date", new_start_date)
+                            # print("\n\nnew_end_date", new_end_date)
+                            # print("\n\ncumulative_shift", cumulative_shift)
+                            # print("\n\nprocessed_breaks", processed_breaks)
+                            # print("\n\nis_adjusted", is_adjusted)
+                            # print("\n\nold_start", old_start)
+                            # print("\n\nold_end", old_end)
+                            
                     
                     # --- 2. Wrap around and calculate backwards from max_order down to 2 ---
                     # (assuming Order 1 is already handled by being fixed)
@@ -424,7 +441,10 @@ try:
                                         break # Exit the 'for' loop and restart the 'while' with the updated shift
 
                             # The final start date is the initial start date minus all the accumulated break times
+                            
+                            # print(f"\n\ncumulative_shift: {cumulative_shift}")
                             new_start_date = new_start_date - cumulative_shift
+                            new_end_date = new_start_date + pd.Timedelta(weeks=row['Duración']) - pd.Timedelta(days=1)
 
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
@@ -437,8 +457,8 @@ try:
                                     'Fecha Inicio': new_start_date.isoformat(),
                                     'Fecha Fin': new_end_date.isoformat()
                                 }
-                                print(f"    Updated Module Order {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
-
+                            # print(f"\n\n    Updated Module Order start date {row['Orden']}: {row['Nombre Módulo']} from {old_start.strftime('%Y-%m-%d')} to {new_start_date.strftime('%Y-%m-%d')}")
+                            # print(f"    Updated Module Order end date {row['Orden']}: {row['Nombre Módulo']} from {old_end.strftime('%Y-%m-%d')} to {new_end_date.strftime('%Y-%m-%d')}")
                             last_date_used = new_start_date
 
 
