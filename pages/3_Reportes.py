@@ -4,7 +4,7 @@ import urllib.parse
 import datetime
 from config import setup_page, db # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import create_filename_date_range, load_attendance, get_attendance_dates, load_students, get_last_updated, get_student_email, get_student_start_date, get_student_phone, date_format, load_all_attendance
+from utils import create_filename_date_range, load_attendance, get_attendance_dates, load_students, get_last_updated, get_student_email, get_student_start_date, get_student_end_date, get_student_phone, date_format, load_all_attendance, get_student_modulo_inicio, get_student_modulo_fin
 
 
 # --- Session Check ---
@@ -224,8 +224,9 @@ if all_attendance:
             
             # 3. Display Daily Summary Report
             if daily_summary_data:
-                summary_header = f"Resumen Diario de Asistencia: {date_format(start_date, '%Y-%m-%d')} hasta {date_format(end_date, '%Y-%m-%d')}" # Translated
-                st.subheader(summary_header)
+                summary_header = f"Fechas seleccionadas: {date_format(start_date, '%Y-%m-%d')} hasta {date_format(end_date, '%Y-%m-%d')}" # Translated
+                st.subheader("Resumen Diario de Asistencia")
+                st.caption(summary_header)
                 df_summary_display = pd.DataFrame(daily_summary_data)
                 # Reorder columns for better display, including Day Name
                 cols_order = ['Fecha', 'Día', '# Presentes', '# Ausentes'] # Updated column names
@@ -247,7 +248,7 @@ if all_attendance:
             st.divider()
             st.subheader("Estudiantes que Nunca Asistieron en las fechas Seleccionadas") # Clarify this includes weekends if data existed
             students_never_attended_list = sorted(list(master_student_list - students_present_in_range))
-            
+            print("students_never_attended_list", students_never_attended_list)
             def create_whatsapp_link(phone: str, message: str) -> str:
                 phone = ''.join(filter(str.isdigit, phone))
                 encoded_message = urllib.parse.quote(message)
@@ -275,7 +276,10 @@ if all_attendance:
                 # Create DataFrame for display with start dates
                 never_attended_data = []
                 for student_name in students_never_attended_list:
+                    modulo_inicio = get_student_modulo_inicio(all_students_df, student_name)
+                    modulo_fin = get_student_modulo_fin(all_students_df, student_name)  
                     start_date = get_student_start_date(all_students_df, student_name)
+                    end_date = get_student_end_date(all_students_df, student_name)
                     phone = get_student_phone(all_students_df, student_name)
                     email = get_student_email(all_students_df, student_name)
                     student_name_only = get_first_name(student_name)
@@ -294,7 +298,10 @@ if all_attendance:
         
                     never_attended_data.append({
                         'Nombre': student_name.strip(),
+                        'Modulo Inicio': modulo_inicio,
                         'Inicio': start_date,
+                        'Modulo Fin': modulo_fin,
+                        'Fin': end_date,
                         'Teléfono': phone or 'No disponible',
                         'Email': email or 'No disponible',
                         'WhatsApp': whatsapp_link,
@@ -306,6 +313,10 @@ if all_attendance:
                 # Create a copy of the DataFrame without the email column for display
                 display_columns = [col for col in df_never_attended.columns if col != 'Email']
                 df_display = df_never_attended[display_columns].copy()
+                
+                # Sort by 'Fin' column in ascending order
+                if 'Fin' in df_display.columns:
+                    df_display = df_display.sort_values('Fin', ascending=False)
 
                 # Use st.dataframe for better display
                 st.dataframe(
@@ -314,7 +325,15 @@ if all_attendance:
                     hide_index=True,
                     column_config={
                         'WhatsApp': st.column_config.LinkColumn(width="small", display_text="Contactar"),
-                        'Teams': st.column_config.LinkColumn(width="small", display_text="Contactar")
+                        'Teams': st.column_config.LinkColumn(width="small", display_text="Contactar"),
+                        'Inicio': st.column_config.DateColumn(
+                            'Inicio',
+                            format="MM/DD/YYYY"
+                        ),
+                        'Fin': st.column_config.DateColumn(
+                            'Fin',
+                            format="MM/DD/YYYY"
+                        )
                     }
                 )
                 # Create CSV download
