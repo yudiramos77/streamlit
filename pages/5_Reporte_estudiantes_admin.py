@@ -370,13 +370,12 @@ if course_emails:
         # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
         # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
         st.subheader("📊 Flujo de estudiantes activos por mes")
-
-        # Establecer idioma español para los nombres de meses
-        try:
-            locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux/macOS
-        except:
-            locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # Windows
-
+        
+        meses_es = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
         # Copia y formatea fechas
         students = df_renamed.copy()
         students['Fecha de Inicio'] = pd.to_datetime(students['Fecha de Inicio'])
@@ -397,7 +396,7 @@ if course_emails:
             active_per_month.append({
                 'Mes': date,
                 'Activos': len(activos),
-                'Etiqueta': date.strftime('%b %Y').capitalize()
+                'Etiqueta': meses_es[date.month] + ' ' + date.strftime('%Y')
             })
 
         active_df = pd.DataFrame(active_per_month)
@@ -488,6 +487,8 @@ if course_emails:
             var_name='Tipo de Movimiento', # Nueva columna: 'Ingresos' o 'Egresos'
             value_name='Cantidad'          # Nueva columna: el valor numérico
         )
+
+        datos_grafico['Mes_Esp'] = datos_grafico['Mes'].apply(lambda d: f"{meses_es[d.month]} {d.year}")
 
         # 3. Crear el gráfico con Altair
         chart = alt.Chart(datos_grafico).mark_bar(size=30).encode(
