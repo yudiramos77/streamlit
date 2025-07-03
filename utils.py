@@ -788,7 +788,7 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
             
         module_options = []
         today = datetime.datetime.today()
-        cutoff_date = today - datetime.timedelta(days=180)
+        cutoff_date = today - datetime.timedelta(days=300)
         
         # Process each module
         for module_id, module_data in modules_ref.val().items():
