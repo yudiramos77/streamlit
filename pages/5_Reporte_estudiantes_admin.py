@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import locale
+import altair as alt
 import urllib.parse
 from config import setup_page
 from utils import (
@@ -30,7 +32,7 @@ if 'modules_df_by_course' not in st.session_state:
 if 'current_module_id_for_today' not in st.session_state:
     st.session_state.current_module_id_for_today = None
 
-st.subheader("1. Seleccionar Curso")
+st.subheader(" Seleccionar Curso")
 
 
 # Get available courses (emails)
@@ -306,7 +308,7 @@ if course_emails:
             return ['' for _ in row]
 
         # Sort the DataFrame by 'Fecha de Inicio'
-        df_renamed = df_renamed.sort_values(by='Fecha de Inicio', ascending=True)   
+        df_renamed = df_renamed.sort_values(by='Fecha de Inicio', ascending=False)   
 
         # 4. Decide whether to apply styling
         if current_module_id:
@@ -317,7 +319,7 @@ if course_emails:
             df_to_show = df_renamed
 
         
-        st.subheader("2. Reporte de Estudiantes")
+        st.subheader("📜 Reporte de Estudiantes")
 
         # Metrics
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -367,6 +369,159 @@ if course_emails:
         # st.info("Por favor, seleccione un módulo para ver los estudiantes.")
         # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
         # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
+        st.subheader("📊 Flujo de estudiantes activos por mes")
+
+        # Establecer idioma español para los nombres de meses
+        try:
+            locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux/macOS
+        except:
+            locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # Windows
+
+        # Copia y formatea fechas
+        students = df_renamed.copy()
+        students['Fecha de Inicio'] = pd.to_datetime(students['Fecha de Inicio'])
+        students['Fecha de Finalización'] = pd.to_datetime(students['Fecha de Finalización'])
+
+        # Rango mensual para analizar
+        min_date = students['Fecha de Inicio'].min()
+        max_date = students['Fecha de Finalización'].max()
+        monthly_range = pd.date_range(min_date, max_date, freq='MS')
+
+        # Calcular estudiantes activos por mes
+        active_per_month = []
+        for date in monthly_range:
+            activos = students[
+                (students['Fecha de Inicio'] <= date) &
+                ((students['Fecha de Finalización'].isna()) | (students['Fecha de Finalización'] >= date))
+            ]
+            active_per_month.append({
+                'Mes': date,
+                'Activos': len(activos),
+                'Etiqueta': date.strftime('%b %Y').capitalize()
+            })
+
+        active_df = pd.DataFrame(active_per_month)
+
+        hoy = pd.to_datetime(datetime.datetime.today().replace(day=1))
+        # Grafico de estudiantes activos por mes
+        # 🔴 Línea vertical con tooltip de "Mes actual"
+        linea_actual = alt.Chart(pd.DataFrame({'Mes': [hoy], 'label': ['Mes actual']})).mark_rule(
+            color='red',
+            strokeDash=[5, 5],
+            size=2
+        ).encode(
+            x='Mes:T',
+            tooltip=alt.Tooltip('label:N', title='')
+        )
+
+        # 🔵 Punto del pico máximo
+        pico = active_df.loc[active_df['Activos'].idxmax()]
+        pico_df = pd.DataFrame([pico])
+
+        pico_max = alt.Chart(pico_df).mark_point(
+            shape='triangle-up',
+            size=100,
+            color='orange'
+        ).encode(
+            x='Mes:T',
+            y='Activos:Q',
+            tooltip=[
+                alt.Tooltip('Etiqueta:N', title='Mes pico'),
+                alt.Tooltip('Activos:Q', title='Máximo de Activos')
+            ]
+        )
+
+        # 📈 Línea de evolución mensual
+        chart = alt.Chart(active_df).mark_line(point=True, color="#1f77b4").encode(
+            x=alt.X('Mes:T', title='Mes'),
+            y=alt.Y('Activos:Q', title='Estudiantes activos'),
+            tooltip=[
+                alt.Tooltip('Etiqueta:N', title='Mes'),
+                alt.Tooltip('Activos:Q')
+            ]
+        ).properties(
+            width='container',
+            height=400,
+            title='Estudiantes activos por mes'
+        )
+
+        # Mostrar gráfico combinado
+        st.altair_chart(chart + linea_actual + pico_max, use_container_width=True)
+       
+
+        # ----------------------------------------
+        # 📋 Ingresos y Egresos por mes (tabla y barra)
+        # ----------------------------------------
+        st.subheader("📋 Ingresos y egresos por mes")
+
+        # Agrupar ingresos
+        students['Mes_Inicio'] = students['Fecha de Inicio'].dt.to_period('M').dt.to_timestamp()
+        entradas = students.groupby('Mes_Inicio').size().reset_index(name='Ingresos')
+
+        # Agrupar egresos
+        students['Mes_Fin'] = students['Fecha de Finalización'].dt.to_period('M').dt.to_timestamp()
+        salidas = students.groupby('Mes_Fin').size().reset_index(name='Egresos')
+
+        # Combinar tabla
+        ingresos_egresos = pd.merge(
+            entradas.rename(columns={'Mes_Inicio': 'Mes'}),
+            salidas.rename(columns={'Mes_Fin': 'Mes'}),
+            on='Mes',
+            how='outer'
+        ).fillna(0).sort_values('Mes')
+
+        # Convertir a enteros y usar Mes como índice
+        ingresos_egresos[['Ingresos', 'Egresos']] = ingresos_egresos[['Ingresos', 'Egresos']].astype(int)
+        ingresos_egresos.set_index('Mes', inplace=True)
+
+        # 1. Filtrar para mostrar solo meses con actividad
+        #    Nos quedamos solo con las filas donde 'Ingresos' o 'Egresos' sea mayor que 0.
+        ingresos_egresos_filtrado = ingresos_egresos.query("Ingresos > 0 or Egresos > 0")
+
+        # 2. Preparar los datos para el gráfico (formato largo)
+        #    Altair funciona mejor cuando los datos están en un formato "largo".
+        #    Convertimos las columnas 'Ingresos' y 'Egresos' en filas.
+        datos_grafico = pd.melt(
+            ingresos_egresos_filtrado.reset_index(),
+            id_vars=['Mes'],
+            value_vars=['Ingresos', 'Egresos'],
+            var_name='Tipo de Movimiento', # Nueva columna: 'Ingresos' o 'Egresos'
+            value_name='Cantidad'          # Nueva columna: el valor numérico
+        )
+
+        # 3. Crear el gráfico con Altair
+        chart = alt.Chart(datos_grafico).mark_bar(size=30).encode(
+            x=alt.X('Mes:T', title='Mes', axis=alt.Axis(format='%b %Y')),
+            y=alt.Y('Cantidad:Q', title='Número de Estudiantes'),
+            color=alt.Color(
+                'Tipo de Movimiento:N',
+                title="Tipo de Movimiento",
+                scale=alt.Scale(
+                    domain=['Ingresos', 'Egresos'],
+                    range=['#1f77b4', '#d62728']
+                ),
+                legend=alt.Legend(
+                    orient='bottom',
+                    direction='horizontal',
+                    titleFontSize=12,
+                    labelFontSize=11,
+                    symbolSize=150,
+                    padding=10
+                )
+            ),
+            tooltip=[
+                alt.Tooltip('Mes:T', title='Mes', format='%B %Y'),
+                alt.Tooltip('Cantidad:Q', title='Cantidad'),
+                alt.Tooltip('Tipo de Movimiento:N', title='Tipo')
+            ]
+        ).properties(
+            title='Ingresos y Egresos Mensuales'
+        )
+
+        # 4. Mostrar el gráfico en Streamlit
+        #    - Usamos st.altair_chart en lugar de st.bar_chart.
+        #    - Por defecto, los gráficos de Altair no tienen zoom, cumpliendo ese requisito.
+        st.altair_chart(chart, use_container_width=True)
 else:
     st.warning("No se encontraron cursos disponibles.")
     modules_selected_course = None # Ensure it's explicitly None if no courses
