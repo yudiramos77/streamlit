@@ -354,7 +354,6 @@ def confirm_delete_all_dialog():
                     st.session_state.attendance_data = {'last_updated': None, 'dates': [], 'records': {}}
                     reset_dialog_states()
                     set_last_updated('attendance', st.session_state.email)
-                    st.success("Todas las asistencias eliminadas exitosamente.")
                     st.rerun()
                 else:
                     st.error("Error al eliminar las asistencias.")
@@ -370,12 +369,248 @@ def confirm_delete_all_dialog():
             # Rerun the script to make the dialog disappear
             st.rerun()
     
-attendance_data = update_attendance_session_state()
-all_attendance_dates = attendance_data['dates']
 
-if all_attendance_dates:
-    st.header("Archivos de Asistencia guardados")
-    with st.expander("Ver y editar lista de fechas", expanded=True):
+# --- Advanced Dialog Handling to Fix the "X" Button Issue ---
+
+# 1. Check if the "show" flag was set in the PREVIOUS script run.
+#    We will use this variable to decide whether to draw the dialog in THIS run.
+should_show_dialog_this_run = st.session_state.get('show_edit_dialog', False)
+
+# 2. Immediately reset the flag in the session state.
+#    This ensures that on any FUTURE rerun (e.g., from a checkbox click),
+#    the flag will be False, preventing the dialog from reopening.
+st.session_state.show_edit_dialog = False
+
+# 3. Now, use our local variable to decide whether to open the dialog.
+if should_show_dialog_this_run:
+    edit_selected_dialog() # The dialog will only be called this one time.
+elif st.session_state.show_delete_selected_dialog:
+    confirm_delete_selected_dialog()
+elif st.session_state.show_delete_all_dialog:
+    confirm_delete_all_dialog()
+
+# --- End of Advanced Handling ---
+
+tab1, tab2 = st.tabs(["Nuevo Registro", "Editar Registro"])
+
+with tab1:
+    st.subheader("⬆️ Subir Archivos de Asistencia")
+    uploaded_reports = st.file_uploader(
+        "Las fechas se detectarán de los nombres de archivo.",
+        type=['csv'],
+        accept_multiple_files=True,
+        key=f"report_uploader_daily_{st.session_state.uploader_key_suffix}",
+        on_change=lambda: [
+            setattr(st.session_state, 'current_batch_data_by_date', {}),
+            setattr(st.session_state, 'prepared_attendance_dfs', {})
+        ],
+        help="Suba archivos CSV. La fecha se detecta del nombre de archivo (p.ej., '...Attendance Report MM-DD-YY.csv')"
+    )
+
+    if uploaded_reports:
+        if uploaded_reports != st.session_state.get('last_uploaded_files', []):
+            st.session_state.current_batch_data_by_date = {}
+            st.session_state.prepared_attendance_dfs = {}
+            st.session_state.processed_files_this_session = set()
+            st.session_state.last_uploaded_files = uploaded_reports
+        
+        files_processed_summary = {}
+        files_skipped_summary = {}
+
+        for report_file in uploaded_reports:
+            if report_file.name in st.session_state.processed_files_this_session:
+                continue
+            file_date = extract_date_from_filename(report_file.name)
+            if not file_date:
+                st.warning(f"Omitiendo '{report_file.name}': No se pudo extraer la fecha del nombre del archivo.")
+                files_skipped_summary[report_file.name] = "Sin fecha en el nombre del archivo"
+                st.session_state.processed_files_this_session.add(report_file.name)
+                continue
+            file_bytes = report_file.getvalue()
+            file_content_str = None
+            tried_encodings_list = ['utf-16', 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252'] 
+            try:
+                file_content_str = file_bytes.decode('utf-16')
+            except UnicodeDecodeError:
+                for enc in [e for e in tried_encodings_list if e != 'utf-16']:
+                    try:
+                        file_content_str = file_bytes.decode(enc)
+                        break 
+                    except UnicodeDecodeError:
+                        continue
+            if file_content_str is None:
+                st.error(f"Error al decodificar '{report_file.name}'. Intentados: {', '.join(tried_encodings_list)}.")
+                files_skipped_summary[report_file.name] = "Falló la decodificación"
+                st.session_state.processed_files_this_session.add(report_file.name)
+                continue
+            names_from_report = parse_attendance_report(file_content_str, report_file.name)
+            if names_from_report:
+                st.session_state.current_batch_data_by_date.setdefault(file_date, set()).update(names_from_report)
+                files_processed_summary.setdefault(file_date, []).append(report_file.name)
+            else:
+                st.warning(f"No se pudieron extraer nombres de '{report_file.name}'.")
+                files_skipped_summary[report_file.name] = "Falló el análisis de nombres"
+            st.session_state.processed_files_this_session.add(report_file.name)
+
+        if files_processed_summary:
+            st.subheader("✅ Archivos Procesados Exitosamente")
+            rows = []
+            for date_obj, filenames in files_processed_summary.items():
+                fecha = date_obj.strftime('%m/%d/%Y')
+                archivos = ", ".join(filenames)  # o "\n".join(...) si prefieres una lista vertical
+                asistentes = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
+                
+                rows.append({
+                    "Fecha": fecha,
+                    "Archivos": archivos,
+                    "Asistentes únicos": asistentes
+                })
+
+            # Crear el DataFrame
+            df = pd.DataFrame(rows).sort_values(by="Fecha", ascending=False)
+
+            # Mostrar como tabla
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+        if files_skipped_summary:
+            st.subheader("⚠️ Archivos Omitidos")
+            skipped_summary_str = "\n".join([f"- {filename}: {reason}" for filename, reason in files_skipped_summary.items()])
+            st.warning(skipped_summary_str)
+            
+            # for filename, reason in files_skipped_summary.items():
+            #     st.write(f"- {filename}: {reason}")
+
+        if not st.session_state.current_batch_data_by_date and not uploaded_reports:
+            st.info("Suba archivos de informe de asistencia para comenzar.")
+        elif not st.session_state.current_batch_data_by_date and uploaded_reports:
+            st.info("No se procesaron datos de asistencia de los archivos subidos. Verifique los archivos e inténtelo de nuevo.")
+
+        if uploaded_reports and st.session_state.current_batch_data_by_date and not st.session_state.prepared_attendance_dfs:
+
+            if st.button("Preparar Tablas de Asistencia para Edición", type="secondary"):
+                students_last_updated = get_last_updated('students')
+                students_df, _ = load_students(students_last_updated)
+                if students_df is None or students_df.empty:
+                    st.error("No se encontraron datos de estudiantes. Por favor, suba una lista de estudiantes en la página 'Gestión de Estudiantes' primero.")
+                    st.stop()
+                
+                student_names_master_list = students_df['nombre'].astype(str).str.strip().tolist()
+                for date_obj, names_from_reports_set in st.session_state.current_batch_data_by_date.items():
+                    normalized_names_from_reports = {name.lower().strip() for name in names_from_reports_set}
+                    attendance_records = []
+                    for master_name in student_names_master_list:
+                        normalized_master_name = master_name.lower().strip()
+                        present = normalized_master_name in normalized_names_from_reports
+                        attendance_records.append({'Nombre': master_name, 'Presente': present})
+                    
+                    if attendance_records:
+                        attendance_df = pd.DataFrame(attendance_records)
+                        st.session_state.prepared_attendance_dfs[date_obj] = attendance_df
+                    else:
+                        st.info(f"No se generaron registros de asistencia para {date_obj.strftime('%Y-%m-%d')}.")
+                
+                if st.session_state.prepared_attendance_dfs:
+                    st.success("Tablas de asistencia preparadas. Proceda al Paso 3.")
+                    st.rerun()
+                else:
+                    st.warning("No se pudieron preparar tablas de asistencia.")
+
+    if st.session_state.prepared_attendance_dfs:
+        st.divider()
+        st.subheader("📋 Revisar y Guardar Asistencia")
+        st.info("Revise los registros de asistencia abajo. Marque la casilla 'Presente' para los estudiantes que asistieron. Desmarque para los ausentes. Al finalizar, haga clic en '💾 Guardar Asistencia' para guardar los cambios de asistencia para el día seleccionado. Haga click en **'💾✅ Guardar todos los registros'** para guardar los cambios de asistencia para todos los días seleccionados.")
+
+        dates_with_data = sorted(st.session_state.prepared_attendance_dfs.keys())
+
+        if not dates_with_data:
+            st.info("No hay datos de asistencia preparados para mostrar.")
+        else:
+            col1, _ = st.columns(2)
+            with col1:
+                selected_date_str = st.selectbox(
+                    "Seleccione una fecha para ver/editar asistencia:",
+                    options=[d.strftime('%m/%d/%Y') for d in dates_with_data],
+                    index=0
+                )
+                selected_date_obj = datetime.datetime.strptime(selected_date_str, '%m/%d/%Y').date()
+
+            if selected_date_obj in st.session_state.prepared_attendance_dfs:
+                df_to_edit = st.session_state.prepared_attendance_dfs[selected_date_obj]
+                total_attended = df_to_edit['Presente'].value_counts().get(True, 0)
+                # Show date in Spanish
+                spanish_day_name = SPANISH_DAY_NAMES[selected_date_obj.strftime('%A')]
+                spanish_month_name = SPANISH_MONTH_NAMES[selected_date_obj.strftime('%B')]
+                st.caption(f"{spanish_day_name}, {selected_date_obj.day} de {spanish_month_name} de {selected_date_obj.year} ({total_attended} de {len(df_to_edit)} estudiantes asistieron)")
+                
+                edited_df = st.data_editor(
+                    df_to_edit,
+                    column_config={
+                        "Nombre": st.column_config.TextColumn("Nombre del Estudiante", disabled=True, width="large"),
+                        "Presente": st.column_config.CheckboxColumn("¿Presente?", default=False, width="small")
+                    },
+                    hide_index=True,
+                    key=f"attendance_editor_upload_{selected_date_str}"
+                )
+                st.session_state.prepared_attendance_dfs[selected_date_obj] = edited_df
+
+                col1, col2, _ = st.columns([2, 3, 2])
+                with col1:
+                    if st.button(f"💾 Guardar {selected_date_str}", key=f"save_{selected_date_str}"):
+                        attendance_data_to_save = edited_df.to_dict('records')
+                        if save_attendance(selected_date_obj, attendance_data_to_save):
+                            update_attendance_session_state()
+                            set_last_updated('attendance')
+                            st.toast(f"✅ ¡Asistencia guardada exitosamente para {selected_date_str}!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error(f"Error al guardar asistencia para {selected_date_str}.")
+                with col2:
+                    if st.button("🗑️ Limpiar Ficheros Cargados"):
+                        st.session_state.current_batch_data_by_date = {}
+                        st.session_state.prepared_attendance_dfs = {}
+                        st.session_state.processed_files_this_session = set()
+                        st.session_state.uploader_key_suffix += 1
+                        st.rerun()
+                st.markdown("---")
+            else:
+                st.warning("La fecha seleccionada ya no tiene datos preparados. Por favor, recargue o seleccione otra fecha.")
+            
+            # save button
+            if st.button("💾✅ Guardar Todos los Registros", type="primary", key="save_all_reports"):
+                save_success = True
+                saved_count = 0
+                for date_obj, df in st.session_state.prepared_attendance_dfs.items():
+                    date_str = date_obj.strftime('%Y-%m-%d')
+                    attendance_data_to_save = df.to_dict('records')
+                    if save_attendance(date_obj, attendance_data_to_save):
+                        saved_count += 1
+                    else:
+                        save_success = False
+                        st.error(f"Error al guardar la asistencia para {date_str}.")
+                if save_success and saved_count > 0:
+                    set_last_updated('attendance')
+                    st.toast("¡Informes guardados exitosamente!", icon="✅")
+                    st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
+                    st.balloons()
+                    update_attendance_session_state()
+                    st.session_state.current_batch_data_by_date = {}
+                    st.session_state.prepared_attendance_dfs = {}
+                    st.session_state.processed_files_this_session = set()
+                    st.session_state.uploader_key_suffix += 1
+                    time.sleep(2)
+                    st.rerun()
+                elif saved_count == 0:
+                    st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
+
+
+with tab2:
+    attendance_data = update_attendance_session_state()
+    all_attendance_dates = attendance_data['dates']
+
+    if all_attendance_dates:
+        st.subheader("📋 Registros de Asistencia guardados")
+
         try:
             dates_df = pd.DataFrame({
                 'Día': [SPANISH_DAY_NAMES[datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%A')] for d in all_attendance_dates],
@@ -429,219 +664,5 @@ if all_attendance_dates:
 
         except Exception as e:
             st.error(f"Error al cargar las asistencias: {str(e)}")
-else:
-    st.info("No hay asistencias registradas.")
-
-# --- Advanced Dialog Handling to Fix the "X" Button Issue ---
-
-# 1. Check if the "show" flag was set in the PREVIOUS script run.
-#    We will use this variable to decide whether to draw the dialog in THIS run.
-should_show_dialog_this_run = st.session_state.get('show_edit_dialog', False)
-
-# 2. Immediately reset the flag in the session state.
-#    This ensures that on any FUTURE rerun (e.g., from a checkbox click),
-#    the flag will be False, preventing the dialog from reopening.
-st.session_state.show_edit_dialog = False
-
-# 3. Now, use our local variable to decide whether to open the dialog.
-if should_show_dialog_this_run:
-    edit_selected_dialog() # The dialog will only be called this one time.
-elif st.session_state.show_delete_selected_dialog:
-    confirm_delete_selected_dialog()
-elif st.session_state.show_delete_all_dialog:
-    confirm_delete_all_dialog()
-
-# --- End of Advanced Handling ---
-
-st.header("Subir Archivos de Informe de Asistencia")
-uploaded_reports = st.file_uploader(
-    "Las fechas se detectarán de los nombres de archivo.",
-    type=['csv'],
-    accept_multiple_files=True,
-    key=f"report_uploader_daily_{st.session_state.uploader_key_suffix}",
-    on_change=lambda: [
-        setattr(st.session_state, 'current_batch_data_by_date', {}),
-        setattr(st.session_state, 'prepared_attendance_dfs', {})
-    ],
-    help="Suba archivos CSV. La fecha se detecta del nombre de archivo (p.ej., '...Attendance Report MM-DD-YY.csv')"
-)
-
-if uploaded_reports:
-    if uploaded_reports != st.session_state.get('last_uploaded_files', []):
-        st.session_state.current_batch_data_by_date = {}
-        st.session_state.prepared_attendance_dfs = {}
-        st.session_state.processed_files_this_session = set()
-        st.session_state.last_uploaded_files = uploaded_reports
-    
-    files_processed_summary = {}
-    files_skipped_summary = {}
-
-    for report_file in uploaded_reports:
-        if report_file.name in st.session_state.processed_files_this_session:
-            continue
-        file_date = extract_date_from_filename(report_file.name)
-        if not file_date:
-            st.warning(f"Omitiendo '{report_file.name}': No se pudo extraer la fecha del nombre del archivo.")
-            files_skipped_summary[report_file.name] = "Sin fecha en el nombre del archivo"
-            st.session_state.processed_files_this_session.add(report_file.name)
-            continue
-        file_bytes = report_file.getvalue()
-        file_content_str = None
-        tried_encodings_list = ['utf-16', 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252'] 
-        try:
-            file_content_str = file_bytes.decode('utf-16')
-        except UnicodeDecodeError:
-            for enc in [e for e in tried_encodings_list if e != 'utf-16']:
-                try:
-                    file_content_str = file_bytes.decode(enc)
-                    break 
-                except UnicodeDecodeError:
-                    continue
-        if file_content_str is None:
-            st.error(f"Error al decodificar '{report_file.name}'. Intentados: {', '.join(tried_encodings_list)}.")
-            files_skipped_summary[report_file.name] = "Falló la decodificación"
-            st.session_state.processed_files_this_session.add(report_file.name)
-            continue
-        names_from_report = parse_attendance_report(file_content_str, report_file.name)
-        if names_from_report:
-            st.session_state.current_batch_data_by_date.setdefault(file_date, set()).update(names_from_report)
-            files_processed_summary.setdefault(file_date, []).append(report_file.name)
-        else:
-            st.warning(f"No se pudieron extraer nombres de '{report_file.name}'.")
-            files_skipped_summary[report_file.name] = "Falló el análisis de nombres"
-        st.session_state.processed_files_this_session.add(report_file.name)
-
-    if files_processed_summary:
-        st.markdown("### ✅ Archivos Procesados Exitosamente")
-        for date_obj, filenames in files_processed_summary.items():
-            attendee_count = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
-            with st.expander(f"{date_obj.strftime('%m/%d/%Y')} — {len(filenames)} archivo(s), {attendee_count} asistentes únicos"):
-                col1, col2 = st.columns([1, 3])
-                col1.markdown("**Archivos:**")
-                for filename in filenames:
-                    col2.write(f"📄 {filename}")
-    if files_skipped_summary:
-        st.markdown("**Archivos Omitidos:**")
-        for filename, reason in files_skipped_summary.items():
-            st.write(f"- {filename}: {reason}")
-
-if not st.session_state.current_batch_data_by_date and not uploaded_reports:
-    st.info("Suba archivos de informe de asistencia para comenzar.")
-elif not st.session_state.current_batch_data_by_date and uploaded_reports:
-    st.info("No se procesaron datos de asistencia de los archivos subidos. Verifique los archivos e inténtelo de nuevo.")
-
-if uploaded_reports and st.session_state.current_batch_data_by_date:
-    st.divider()
-    st.subheader("Paso 2: Preparar Tablas de Asistencia")
-    if st.button("Preparar Tablas de Asistencia para Edición"):
-        students_last_updated = get_last_updated('students')
-        students_df, _ = load_students(students_last_updated)
-        if students_df is None or students_df.empty:
-            st.error("No se encontraron datos de estudiantes. Por favor, suba una lista de estudiantes en la página 'Gestión de Estudiantes' primero.")
-            st.stop()
-        
-        student_names_master_list = students_df['nombre'].astype(str).str.strip().tolist()
-        for date_obj, names_from_reports_set in st.session_state.current_batch_data_by_date.items():
-            normalized_names_from_reports = {name.lower().strip() for name in names_from_reports_set}
-            attendance_records = []
-            for master_name in student_names_master_list:
-                normalized_master_name = master_name.lower().strip()
-                present = normalized_master_name in normalized_names_from_reports
-                attendance_records.append({'Nombre': master_name, 'Presente': present})
-            
-            if attendance_records:
-                attendance_df = pd.DataFrame(attendance_records)
-                st.session_state.prepared_attendance_dfs[date_obj] = attendance_df
-            else:
-                st.info(f"No se generaron registros de asistencia para {date_obj.strftime('%Y-%m-%d')}.")
-        
-        if st.session_state.prepared_attendance_dfs:
-            st.success("Tablas de asistencia preparadas. Proceda al Paso 3.")
-            st.rerun()
-        else:
-            st.warning("No se pudieron preparar tablas de asistencia.")
-
-if st.session_state.prepared_attendance_dfs:
-    st.divider()
-    st.subheader("Paso 3: Revisar y Guardar Asistencia")
-    st.caption("Revise los registros de asistencia abajo. Marque la casilla 'Presente' para los estudiantes que asistieron. Desmarque para los ausentes.")
-
-    dates_with_data = sorted(st.session_state.prepared_attendance_dfs.keys())
-
-    if not dates_with_data:
-        st.info("No hay datos de asistencia preparados para mostrar.")
     else:
-        if st.button("💾 Guardar Todos los Reportes", type="primary", key="save_all_reports"):
-            save_success = True
-            saved_count = 0
-            for date_obj, df in st.session_state.prepared_attendance_dfs.items():
-                date_str = date_obj.strftime('%Y-%m-%d')
-                attendance_data_to_save = df.to_dict('records')
-                if save_attendance(date_obj, attendance_data_to_save):
-                    saved_count += 1
-                else:
-                    save_success = False
-                    st.error(f"Error al guardar la asistencia para {date_str}.")
-            if save_success and saved_count > 0:
-                set_last_updated('attendance')
-                st.toast("¡Informes guardados exitosamente!", icon="✅")
-                st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
-                st.balloons()
-                update_attendance_session_state()
-                st.session_state.current_batch_data_by_date = {}
-                st.session_state.prepared_attendance_dfs = {}
-                st.session_state.processed_files_this_session = set()
-                st.session_state.uploader_key_suffix += 1
-                time.sleep(2)
-                st.rerun()
-            elif saved_count == 0:
-                st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
-
-        selected_date_str = st.selectbox(
-            "Seleccione una fecha para ver/editar asistencia:",
-            options=[d.strftime('%m/%d/%Y') for d in dates_with_data],
-            index=0
-        )
-        selected_date_obj = datetime.datetime.strptime(selected_date_str, '%m/%d/%Y').date()
-
-        if selected_date_obj in st.session_state.prepared_attendance_dfs:
-            df_to_edit = st.session_state.prepared_attendance_dfs[selected_date_obj]
-            total_attended = df_to_edit['Presente'].value_counts().get(True, 0)
-            # Show date in Spanish
-            spanish_day_name = SPANISH_DAY_NAMES[selected_date_obj.strftime('%A')]
-            spanish_month_name = SPANISH_MONTH_NAMES[selected_date_obj.strftime('%B')]
-            st.markdown(f"#### Asistencia para: {spanish_day_name}, {selected_date_obj.day} de {spanish_month_name} de {selected_date_obj.year} ({total_attended} de {len(df_to_edit)})")
-            
-            edited_df = st.data_editor(
-                df_to_edit,
-                column_config={
-                    "Nombre": st.column_config.TextColumn("Nombre del Estudiante", disabled=True, width="large"),
-                    "Presente": st.column_config.CheckboxColumn("¿Presente?", default=False, width="small")
-                },
-                hide_index=True,
-                key=f"attendance_editor_upload_{selected_date_str}"
-            )
-            st.session_state.prepared_attendance_dfs[selected_date_obj] = edited_df
-
-            col1, col2, _ = st.columns([2, 3, 2])
-            with col1:
-                if st.button(f"💾 Guardar {selected_date_str}", key=f"save_{selected_date_str}"):
-                    attendance_data_to_save = edited_df.to_dict('records')
-                    if save_attendance(selected_date_obj, attendance_data_to_save):
-                        update_attendance_session_state()
-                        set_last_updated('attendance')
-                        st.success(f"¡Asistencia guardada exitosamente para {selected_date_str}!")
-                        del st.session_state.prepared_attendance_dfs[selected_date_obj]
-                        st.rerun()
-                    else:
-                        st.error(f"Error al guardar asistencia para {selected_date_str}.")
-            with col2:
-                if st.button("🗑️ Limpiar Ficheros Cargados"):
-                    st.session_state.current_batch_data_by_date = {}
-                    st.session_state.prepared_attendance_dfs = {}
-                    st.session_state.processed_files_this_session = set()
-                    st.session_state.uploader_key_suffix += 1
-                    st.rerun()
-            st.markdown("---")
-        else:
-            st.warning("La fecha seleccionada ya no tiene datos preparados. Por favor, recargue o seleccione otra fecha.")
+        st.info("No hay asistencias registradas.")
