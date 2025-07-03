@@ -222,90 +222,6 @@ students_text_area = st.text_area(
 )
 submit_add_students_text = st.button("Agregar Estudiantes", type="primary")
 
-# if uploaded_file is not None:
-#     try:
-#         if selected_course is None:
-#             st.warning("Por favor, seleccione un curso antes de subir estudiantes.")
-#             st.stop()
-
-#         # Read the uploaded file
-#         if uploaded_file.name.endswith('.csv'):
-#             df_upload = pd.read_csv(uploaded_file)
-#         else:  # Excel file
-#             df_upload = pd.read_excel(uploaded_file)
-
-#         # Normalize column names and handle case sensitivity
-#         df_upload.columns = df_upload.columns.str.lower().str.strip()
-
-#         # Ensure required columns exist
-#         required_columns = {'nombre'}
-#         missing_columns = required_columns - set(df_upload.columns)
-
-#         if missing_columns:
-#             st.error(f"Error: El archivo subido no contiene las columnas requeridas: {', '.join(missing_columns)}. "
-#                      f"Por favor asegúrese de que su archivo incluya al menos la columna: nombre")
-#         else:
-#             # Process required fields
-#             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
-
-#             # Initialize optional fields if they don't exist
-#             optional_fields = {
-#                 'email': '',
-#                 'canvas_id': '',
-#                 'telefono': ''
-#             }
-
-#             for field, default_value in optional_fields.items():
-#                 if field not in df_upload.columns:
-#                     df_upload[field] = default_value
-#                 else:
-#                     # Clean up the data
-#                     df_upload[field] = df_upload[field].fillna('').astype(str).str.strip()
-
-#             # Get the selected module's details if available
-#             module_info = {}
-#             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
-#                 module_info = {
-#                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
-#                     'fecha_fin': st.session_state.selected_module.get('end_date'),
-#                     'modulo': st.session_state.selected_module.get('module_name'),
-#                     'ciclo': st.session_state.selected_module.get('ciclo'),
-#                     'firebase_key': st.session_state.selected_module_id
-#                 }
-
-#                 if module_info['fecha_inicio'] and module_info['fecha_fin'] and isinstance(module_info['fecha_inicio'], str) and isinstance(module_info['fecha_fin'], str):
-#                     try:
-#                         # Convert to datetime and format consistently
-#                         module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
-#                         module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
-#                         # Add module info to all uploaded students
-#                         df_upload['fecha_inicio'] = module_info['fecha_inicio']
-#                         df_upload['fecha_fin'] = module_info['fecha_fin']
-#                         df_upload['modulo'] = module_info['modulo']
-#                         df_upload['ciclo'] = module_info['ciclo']
-#                         df_upload['modulo_id'] = module_info['firebase_key']
-#                     except (ValueError, TypeError):
-#                         module_info = {}  # Reset if date conversion fails
-
-#             st.subheader("Vista Previa del Archivo Subido")
-#             st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
-#             if module_info.get('fecha_inicio'):
-#                 st.info(f"Se asignará el módulo '{module_info['modulo']}' con fecha de inicio: {module_info['fecha_inicio']}")
-#             st.dataframe(df_upload)
-
-#             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)", key="save_uploaded_students_btn"):
-#                 if admin_save_students(selected_course, df_upload): # Pass selected_course
-#                     st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
-#                     st.session_state.students_df_by_course[selected_course] = df_upload.copy() # Update session state copy
-#                     st.session_state.editor_key += 1 # Increment key to force data_editor refresh
-#                     get_current_students_data.clear() # Clear the cache for the loading function
-#                     time.sleep(1)
-#                     st.rerun()
-
-#     except Exception as e:
-#         st.error(f"Error procesando el archivo: {str(e)}")
-#         st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
-
 # --- Add Multiple Students via Text Area ---
 if 'text_area_input' in st.session_state and st.session_state.text_area_input and submit_add_students_text:
     if selected_course is None:
@@ -432,7 +348,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         skipped_names.append(name)
 
             if not students_to_add_list:
-                st.info("No hay nuevos estudiantes para agregar. Todos los nombres proporcionados ya existen o eran duplicados en la entrada.")
+                st.warning("No hay nuevos estudiantes para agregar. Todos los nombres proporcionados ya existen o eran duplicados en la entrada.")
                 if skipped_names:
                     st.caption(f"Nombres omitidos (ya existen o duplicados): {', '.join(skipped_names)}")
             else:
@@ -448,7 +364,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 
                 # print("\n\nupdated_students_df", updated_students_df)
                 if admin_save_students(selected_course, updated_students_df): # Pass selected_course
-                    st.success(f"¡{added_count} estudiante(s) agregado(s) exitosamente!")
+                    st.toast(f"¡{added_count} estudiante(s) agregado(s) exitosamente!", icon="✅")
+                    time.sleep(1)
                     if skipped_names:
                         st.caption(f"Nombres omitidos (ya existen o duplicados en la entrada): {', '.join(skipped_names)}")
                     st.session_state.students_df_by_course[selected_course] = updated_students_df.copy() # Update session state copy
@@ -596,8 +513,12 @@ if df_loaded is not None and not df_loaded.empty:
             edited_df['Eliminar'] = edited_df['Eliminar'].astype(bool)
         # ------------------------------------------------------------------------------------------
 
+
+
+    col1, col2, col3 = st.columns([2, 2, 2])
+    with col1:
         # --- Save Changes Button (for edits made directly in the table) ---
-        if st.button("💾 Guardar Cambios", key="save_changes_btn"):
+        if st.button("💾 Guardar Cambios", key="save_changes_btn", use_container_width=True):
             # Prepare df_to_save based on df_loaded (the original data)
             # We will merge changes from edited_df into df_loaded (the source of truth)
             df_to_save = df_loaded.copy()
@@ -624,7 +545,8 @@ if df_loaded is not None and not df_loaded.empty:
 
             if changes_detected:
                 if admin_save_students(selected_course, df_to_save): # Pass selected_course
-                    st.success("¡Cambios guardados exitosamente!")
+                    st.toast("¡Cambios guardados exitosamente!", icon="✅")
+                    time.sleep(1.5)
                     st.session_state.students_df_by_course[selected_course] = df_to_save.copy() # Update session state copy
                     st.session_state.editor_key += 1 # Increment key to force data_editor refresh
                     get_current_students_data.clear() # Clear the cache for the loading function
@@ -634,12 +556,13 @@ if df_loaded is not None and not df_loaded.empty:
             else:
                 st.info("No se detectaron cambios para guardar.")
 
+    with col3:
         # --- Delete Students Button (Always Visible, Disabled when no selection) ---
         students_selected_for_deletion = edited_df[edited_df['Eliminar'] == True]
         delete_button_disabled = students_selected_for_deletion.empty # True if no students are selected
 
         # The button is now always present, but its 'disabled' state changes based on selection
-        if st.button("🗑️ Eliminar Estudiantes Seleccionados", type="primary", disabled=delete_button_disabled, key="delete_students_btn"):
+        if st.button("🗑️ Eliminar Seleccionados", type="primary", disabled=delete_button_disabled, key="delete_students_btn", use_container_width=True):
             if not students_selected_for_deletion.empty: # Double-check the condition inside the button press
                 names_to_delete = students_selected_for_deletion['nombre'].tolist()
 
@@ -653,7 +576,8 @@ if df_loaded is not None and not df_loaded.empty:
                 ]
 
                 if admin_save_students(selected_course, students_to_keep_df): # Pass selected_course
-                    st.success(f"¡{len(names_to_delete)} estudiante(s) eliminado(s) exitosamente!")
+                    st.toast(f"¡{len(names_to_delete)} estudiante(s) eliminado(s) exitosamente!", icon="✅")
+                    time.sleep(1.5)
                     st.session_state.students_df_by_course[selected_course] = students_to_keep_df.copy() # Update session state copy
                     st.session_state.editor_key += 1 # Increment key to force data_editor refresh
                     get_current_students_data.clear() # Clear the cache for the loading function
@@ -664,6 +588,7 @@ if df_loaded is not None and not df_loaded.empty:
                 st.warning("Por favor, seleccione al menos un estudiante para eliminar.") # This message is unlikely to be seen now as button is disabled
         # Removed the `elif any(edited_df['Eliminar']): pass` as it's redundant with the `disabled` logic
 
+    with col2:
         # --- Download CSV Button ---
         expected_fields = ["nombre", "email", "canvas_id", "telefono"]
         filtered_df = edited_df[expected_fields]
@@ -672,7 +597,8 @@ if df_loaded is not None and not df_loaded.empty:
             label="📥 Descargar CSV",
             data=csv,
             file_name="estudiantes.csv",
-            mime='text/csv'
+            mime='text/csv',
+            use_container_width=True
         )
 
 elif df_loaded is not None and df_loaded.empty:

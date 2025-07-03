@@ -289,7 +289,7 @@ def admin_save_students(course_email, students_df):
         # Save to Firebase with error handling
         try:
             db.child("students").child(course_email).set(data, token=st.session_state.user_token)
-            st.success(f"Successfully saved {len(df)} student records to {course_email}.")
+            # st.success(f"Successfully saved {len(df)} student records to {course_email}.")
             admin_set_last_updated('students', course_email)
             return True
         except Exception as firebase_error:
