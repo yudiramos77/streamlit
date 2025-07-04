@@ -140,7 +140,7 @@ def is_missing_firebase_key(val):
 # --- Select Module ---
 if modules_selected_course: # Only show module selection if a course is selected
     st.divider()
-    st.subheader("2. Seleccionar Módulo")
+    st.subheader(" Módulos del Curso")
     st.info("Para guardar los cambios una vez que modifique la tabla de módulos, presione el botón 'Guardar Cambios'. Los campos Nombre de Modulo, Duración y Orden son obligatorios.")
 
 try:

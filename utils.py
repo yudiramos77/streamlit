@@ -547,6 +547,66 @@ def get_student_start_date(all_students_df, student_name):
     
     return format_date_for_display(start_date)
 
+def get_student_end_date(all_students_df, student_name):
+    """
+    Get end date for a specific student.
+    Returns formatted date string or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    end_date = student_data.get('fecha_fin', 'No especificada')
+    print("\n\nend_date\n", end_date)
+    return format_date_for_display(end_date)
+
+def get_student_modulo_inicio(all_students_df, student_name):
+    """
+    Get start date for a specific student.
+    Returns formatted date string or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    modulo_inicio = student_data.get('modulo', 'No especificada')
+    
+    return modulo_inicio
+
+def get_student_modulo_fin(all_students_df, student_name):
+    """
+    Get end date for a specific student.
+    Returns formatted date string or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    modulo_fin = student_data.get('modulo_fin_name', 'No especificada')
+    
+    return modulo_fin
+
 def get_student_phone(all_students_df, student_name):
     """
     Get phone number for a specific student.

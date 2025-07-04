@@ -204,7 +204,7 @@ def add_break_form():
     
     # Regular Streamlit button for saving data.
     # This will trigger a re-run and the logic below.
-    if st.button("Guardar Semana de Descanso"):
+    if st.button("Guardar Semana de Descanso", type="primary"):
         # Validate that start date is a Monday (0 = Monday, 6 = Sunday)
         if start_date.weekday() != 0:
             st.error("Error: La fecha de inicio debe ser un lunes.")
@@ -239,11 +239,7 @@ def main():
     Main function to run the Streamlit application for managing break weeks.
     Displays existing breaks, provides an area to add new ones, and a section to delete them.
     """
-    
-    st.markdown("""
-    Administre las semanas de descanso que se aplicarán a todos los módulos.
-    Estas fechas se utilizarán para saltar días no hábiles en los cálculos de programación.
-    """)
+    st.info("Administre las semanas de descanso que se aplicarán a todos los módulos. Estas fechas se utilizarán para saltar días no hábiles en los cálculos de programación.", icon=":material/info:")
     
     # Add new break form at the top
     break_data = add_break_form()
